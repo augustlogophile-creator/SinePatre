@@ -6,12 +6,13 @@
 // - GOOGLE_SHEET_CSV_URL  (published CSV export link)
 //
 // POST JSON:
-// { "message": "..." }
+// { "message": "...", "history": [{role:"user"|"assistant", content:"..."}] }
 //
 // Returns:
 // { mode, intro, resources: [{title,url,why}] }
 
 const MAX_MESSAGE_LENGTH = 800;
+const MAX_HISTORY_ITEMS = 12;
 
 const SAFETY_REGEX = [
   /\b(suicide|kill myself|end my life)\b/i,
@@ -21,7 +22,6 @@ const SAFETY_REGEX = [
 ];
 
 // Keep permissive for now so the Squarespace iframe works while testing.
-// After the embed works, tighten this to only your domain.
 function setCors(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -50,7 +50,6 @@ function tokenize(text) {
   const stop = new Set([
     "the","and","or","but","if","to","of","in","on","for","with","is","are","was","were","be","been","being",
     "i","me","my","you","your","we","they","this","that","it","im","i'm","dont","don't","cant","can't",
-    "a","an","at","as","by","from","into","over","than","then","so","just","like","really","very","want",
   ]);
 
   return normalize(text)
@@ -99,80 +98,8 @@ function parseCSV(csv) {
   return rows;
 }
 
-function isCrisisResource(resource) {
-  const t = `${resource.title} ${resource.description} ${resource.when_to_use}`.toLowerCase();
-  return (
-    t.includes("crisis") ||
-    t.includes("suicide") ||
-    t.includes("self-harm") ||
-    t.includes("hotline") ||
-    t.includes("988")
-  );
-}
-
-function scoreResource(resource, queryTokens) {
-  const haystack = tokenize(
-    `${resource.title} ${resource.description} ${resource.best_for} ${resource.fatherlessness_connection} ${resource.when_to_use} ${resource.not_for}`
-  );
-
-  const q = new Set(queryTokens);
-  let score = 0;
-
-  for (const w of haystack) {
-    if (q.has(w)) score += 3;
-  }
-
-  // Boost explicit "talk to someone" intent
-  const raw = `${resource.title} ${resource.description} ${resource.best_for} ${resource.when_to_use}`.toLowerCase();
-  if (
-    raw.includes("peer") ||
-    raw.includes("mentor") ||
-    raw.includes("counsel") ||
-    raw.includes("therap") ||
-    raw.includes("support group") ||
-    raw.includes("talk") ||
-    raw.includes("listen")
-  ) {
-    score += 2;
-  }
-
-  // Small boost for explicit fatherlessness relevance
-  const fatherText = (resource.fatherlessness_connection || "").toLowerCase();
-  if (fatherText.includes("father") || fatherText.includes("dad") || fatherText.includes("fatherless")) {
-    score += 3;
-  }
-
-  return score;
-}
-
-// We keep timeouts very generous to avoid user-facing "took too long" behavior.
-// (Serverless platforms still have their own hard limits.)
-async function fetchWithTimeout(url, opts = {}, ms = 90000) {
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), ms);
-
-  try {
-    const res = await fetch(url, { ...opts, signal: controller.signal });
-    return res;
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-// Cache the sheet across warm invocations to reduce latency.
-async function loadResourcesCached(csvUrl) {
-  const cacheKey = "__SP_RESOURCES_CACHE__";
-  const now = Date.now();
-  const ttlMs = 5 * 60 * 1000;
-
-  const g = globalThis;
-  const cached = g[cacheKey];
-
-  if (cached && cached.expiresAt > now && Array.isArray(cached.data) && cached.data.length) {
-    return cached.data;
-  }
-
-  const r = await fetchWithTimeout(csvUrl, {}, 90000);
+async function loadResources(csvUrl) {
+  const r = await fetch(csvUrl);
   if (!r.ok) throw new Error("Failed to fetch sheet CSV");
   const text = await r.text();
 
@@ -197,7 +124,7 @@ async function loadResourcesCached(csvUrl) {
     if (col(c) === -1) throw new Error(`Missing column: ${c}`);
   }
 
-  const data = rows
+  return rows
     .slice(1)
     .map((r2) => ({
       id: (r2[col("id")] || "").trim(),
@@ -210,30 +137,79 @@ async function loadResourcesCached(csvUrl) {
       url: (r2[col("url")] || "").trim(),
     }))
     .filter((x) => x.id && x.title && x.url);
-
-  g[cacheKey] = { data, expiresAt: now + ttlMs };
-  return data;
 }
 
-async function openaiJSON(apiKey, messages) {
-  const r = await fetchWithTimeout(
-    "https://api.openai.com/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.55,
-        max_tokens: 900,
-        response_format: { type: "json_object" },
-        messages,
-      }),
-    },
-    90000
+function isCrisisResource(resource) {
+  const t = `${resource.title} ${resource.description} ${resource.when_to_use}`.toLowerCase();
+  return (
+    t.includes("crisis") ||
+    t.includes("suicide") ||
+    t.includes("self-harm") ||
+    t.includes("hotline") ||
+    t.includes("988")
   );
+}
+
+function scoreResource(resource, queryTokens, tagTokens) {
+  const haystack = tokenize(
+    `${resource.title} ${resource.description} ${resource.best_for} ${resource.fatherlessness_connection} ${resource.when_to_use} ${resource.not_for}`
+  );
+
+  let score = 0;
+  for (const w of haystack) {
+    if (queryTokens.includes(w)) score += 3;
+    if (tagTokens.includes(w)) score += 5;
+  }
+
+  // Small boost for explicit fatherlessness relevance
+  const fatherText = (resource.fatherlessness_connection || "").toLowerCase();
+  if (fatherText.includes("father") || fatherText.includes("dad") || fatherText.includes("fatherless")) {
+    score += 4;
+  }
+
+  return score;
+}
+
+function sanitizeHistory(history) {
+  if (!Array.isArray(history)) return [];
+  const trimmed = history
+    .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+    .map((m) => ({
+      role: m.role,
+      content: String(m.content).slice(0, 800),
+    }));
+  return trimmed.slice(-MAX_HISTORY_ITEMS);
+}
+
+function wantSinglePick(message) {
+  const t = normalize(message);
+  return (
+    t.includes("which is the best") ||
+    t.includes("which one is best") ||
+    t.includes("which is best") ||
+    t.includes("pick one") ||
+    t.includes("choose one") ||
+    t.includes("just one") ||
+    t.includes("best one") ||
+    t.includes("the best option")
+  );
+}
+
+// OpenAI call: returns JSON object
+async function openaiJSON(apiKey, messages) {
+  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages,
+    }),
+  });
 
   if (!r.ok) {
     const t = await r.text();
@@ -267,10 +243,13 @@ export default async function handler(req, res) {
   if (!message) return send(req, res, 400, { error: "Missing message" });
   if (message.length > MAX_MESSAGE_LENGTH) return send(req, res, 400, { error: "Message too long" });
 
+  const history = sanitizeHistory(req.body?.history);
+
+  // Hard safety gate: skip AI, return crisis resources only
   if (triggeredSafety(message)) {
     return send(req, res, 200, {
       mode: "safety",
-      intro: "You deserve immediate support right now. Please use one of these options.",
+      intro: "You deserve immediate support. Please use one of these resources now.",
       resources: [
         { title: "988 Suicide & Crisis Lifeline", url: "https://988lifeline.org", why: "24/7 call or text support in the U.S." },
         { title: "Crisis Text Line", url: "https://www.crisistextline.org", why: "Text-based support with trained counselors." },
@@ -281,56 +260,79 @@ export default async function handler(req, res) {
   }
 
   try {
-    const resources = await loadResourcesCached(csvUrl);
+    const resources = await loadResources(csvUrl);
 
+    // 1) Classify need and intent using chat context
+    const classification = await openaiJSON(apiKey, [
+      {
+        role: "system",
+        content:
+          "You are a precise intake assistant for a curated resource navigator for fatherless teens. Output JSON only: { need_tags: string[3-6], urgency: low|medium|high, intent: one of [explore, pick_best, compare, ask_followup], notes: string }. Keep notes short. Do not give advice.",
+      },
+      ...history,
+      { role: "user", content: message },
+    ]);
+
+    const urgency = String(classification.urgency || "low").toLowerCase();
     const queryTokens = tokenize(message);
+    const tagTokens = tokenize((classification.need_tags || []).join(" "));
 
     const rankedAll = resources
-      .map((r) => ({ r, s: scoreResource(r, queryTokens) }))
+      .map((r) => ({ r, s: scoreResource(r, queryTokens, tagTokens) }))
       .filter((x) => x.s > 0)
       .sort((a, b) => b.s - a.s);
 
-    const rankedNonCrisis = rankedAll.filter((x) => !isCrisisResource(x.r));
-    const shortlist = (rankedNonCrisis.length ? rankedNonCrisis : rankedAll).slice(0, 10).map((x) => x.r);
+    let ranked = rankedAll;
+    if (urgency !== "high") {
+      ranked = rankedAll.filter((x) => !isCrisisResource(x.r));
+      if (!ranked.length) ranked = rankedAll;
+    }
 
-    if (!shortlist.length) {
+    if (!ranked.length) {
       return send(req, res, 200, {
         mode: "no_match",
-        intro: "I could not find a strong match yet. Add one detail about what you want (someone to talk to, grief, anxiety, school stress, mentorship).",
+        intro: "I am not seeing a strong match yet. Add one detail about what you want (talking to someone, grief support, school stress, mentorship, therapy).",
         resources: [],
       });
     }
 
+    // 2) Decide how many to show based on intent and phrasing
+    const intent = String(classification.intent || "").toLowerCase();
+    const limit =
+      intent === "pick_best" || wantSinglePick(message)
+        ? 1
+        : 3;
+
+    const top = ranked.slice(0, Math.max(limit, 3)).map((x) => x.r); // send a few to the writer, even if we only show 1
+
+    // 3) Write final response, conversational but grounded in the curated database
     const response = await openaiJSON(apiKey, [
       {
         role: "system",
         content:
-          "You are the SinePatre Resource Navigator.\n" +
-          "Purpose: Recommend support options to fatherless teens using ONLY a curated database provided in the prompt.\n\n" +
-          "Rules:\n" +
-          "- Use ONLY the provided resources. Do not invent names, hotlines, or websites.\n" +
-          "- Do not give medical, legal, or therapeutic instructions. Do not diagnose.\n" +
-          "- Be calm, respectful, and eloquent.\n" +
-          "- Choose EXACTLY 3 resources.\n" +
-          "- For each resource, write a comprehensive overview in 3 to 6 sentences that explains what it is, who it fits, why it matches the user's message, and what the user can do next.\n" +
-          "- Return JSON only in this shape:\n" +
-          '{ "intro": "string", "resources": [ { "title": "string", "url": "string", "why": "string" }, ... ] }',
+          "You are the SinePatre Resource Navigator. You help like a thoughtful guide, warm and direct. You MUST use ONLY the provided resources and their fields. No generic therapy advice, no medical claims. Output JSON only: { intro: string, resources: [{ title: string, url: string, why: string }] }. Rules: If the user asks for the single best option, return exactly 1 resource. Otherwise return up to 3 resources. Each why must be 3 to 6 sentences, specific to the user's message and the resource fields, and include what the teen can do next in a practical way (visit, sign up, how to use it). If the user asks a follow-up question about the previous list (for example which is best), answer it directly.",
       },
+      ...history,
       {
         role: "user",
         content: JSON.stringify({
           message,
-          resources: shortlist,
+          urgency,
+          need_tags: classification.need_tags || [],
+          intent,
+          show_count: limit,
+          resources: top,
         }),
       },
     ]);
 
-    const safeResources = Array.isArray(response.resources) ? response.resources.slice(0, 3) : [];
+    const outResources = Array.isArray(response.resources) ? response.resources : [];
+    const clipped = outResources.slice(0, limit);
 
     return send(req, res, 200, {
       mode: "recommendations",
-      intro: response.intro || "Here are three high-fit options from a curated database, matched to what you shared.",
-      resources: safeResources,
+      intro: response.intro || "Here is what fits best based on what you shared.",
+      resources: clipped,
     });
   } catch (err) {
     const msg = String(err?.message || err);
