@@ -84,7 +84,7 @@
     }
 
     .hero h1{
-      margin: 0 0 24px;
+      margin: 0 0 22px;
       font-weight: 400;
       font-size: 64px;
       line-height: 1.15;
@@ -94,10 +94,10 @@
 
     .hero p{
       margin: 0 auto 34px;
-      max-width: 720px;
-      color: rgba(255,255,255,0.7);
+      max-width: 760px;
+      color: rgba(255,255,255,0.72);
       font-size: 18px;
-      line-height: 1.6;
+      line-height: 1.65;
       font-weight: 400;
       letter-spacing: 0.2px;
     }
@@ -114,19 +114,74 @@
     }
 
     .label{
-      font-size: 12px;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.65);
-      margin: 0 0 10px;
+      font-size: 14px;
+      letter-spacing: -0.01em;
+      color: rgba(255,255,255,0.78);
+      margin: 0 0 12px;
       font-weight: 600;
     }
 
+    /* CHAT */
+    .chat{
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.20);
+      overflow: hidden;
+    }
+
+    .messages{
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 360px;
+      overflow: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.2) transparent;
+    }
+
+    .bubble{
+      max-width: 86%;
+      border-radius: 16px;
+      padding: 12px 14px;
+      font-size: 17px;
+      line-height: 1.55;
+      letter-spacing: 0.1px;
+      white-space: pre-wrap;
+    }
+
+    .bubble.user{
+      align-self: flex-end;
+      background: rgba(255,255,255,0.92);
+      color: #1a1a1a;
+      border: 1px solid rgba(255,255,255,0.22);
+      border-bottom-right-radius: 6px;
+    }
+
+    .bubble.bot{
+      align-self: flex-start;
+      background: rgba(255,255,255,0.10);
+      color: rgba(255,255,255,0.94);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-bottom-left-radius: 6px;
+    }
+
+    .composer{
+      padding: 14px;
+      border-top: 1px solid rgba(255,255,255,0.12);
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
     .textbox{
-      width: 100%;
-      min-height: 120px;
+      flex: 1;
+      min-width: 220px;
+      min-height: 52px;
+      max-height: 140px;
       resize: vertical;
-      padding: 16px 16px;
+      padding: 14px 14px;
       border-radius: 14px;
       border: 1px solid rgba(255,255,255,0.14);
       background: rgba(0,0,0,0.22);
@@ -141,21 +196,12 @@
       color: rgba(255,255,255,0.45);
     }
 
-    .row{
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 14px;
-      margin-top: 14px;
-      flex-wrap: wrap;
-    }
-
     .cta{
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 12px;
-      padding: 16px 38px;
+      padding: 16px 30px;
       border-radius: 999px;
       background: #ffffff;
       color: #1a1a1a;
@@ -167,6 +213,7 @@
       transition: all 200ms ease;
       position: relative;
       font-family: 'EB Garamond', Georgia, serif;
+      white-space: nowrap;
     }
 
     .cta:hover{
@@ -184,10 +231,10 @@
     .cta svg{ width: 20px; height: 20px; }
 
     .note{
-      color: rgba(255,255,255,0.7);
+      color: rgba(255,255,255,0.68);
       font-size: 13px;
       line-height: 1.5;
-      margin: 0;
+      margin: 10px 2px 0;
     }
 
     .note strong{
@@ -197,46 +244,29 @@
 
     /* CONTENT */
     .content{
-      padding: 72px 0 110px;
+      padding: 56px 0 110px;
       background: #ffffff;
     }
 
-    .filter-bar{
-      display: flex;
-      justify-content: center;
-      margin-bottom: 52px;
+    .section-head{
+      max-width: 900px;
+      margin: 0 auto 18px;
+      padding: 0 6px;
     }
 
-    .segmented{
-      display: inline-flex;
-      background: rgba(230, 230, 230, 0.6);
-      border: 1px solid rgba(200, 200, 200, 0.5);
-      border-radius: 999px;
-      padding: 6px;
-      gap: 0;
+    .section-head h2{
+      font-size: 26px;
+      letter-spacing: -0.02em;
+      margin: 0 0 10px;
+      font-weight: 700;
+      color: var(--ink);
     }
 
-    .segmented button{
-      appearance: none;
-      border: none;
-      background: transparent;
-      padding: 12px 28px;
-      border-radius: 999px;
-      font-weight: 500;
-      color: #999;
-      cursor: pointer;
-      transition: all 200ms ease;
-      font-size: 16px;
-      font-family: 'EB Garamond', Georgia, serif;
-      white-space: nowrap;
-    }
-
-    .segmented button:hover{ color: var(--ink); }
-
-    .segmented button.active{
-      background: #1a1a1a;
-      color: #ffffff;
-      border: none;
+    .section-head p{
+      margin: 0;
+      color: rgba(10,10,11,0.72);
+      font-size: 15px;
+      line-height: 1.7;
     }
 
     /* GRID */
@@ -244,6 +274,7 @@
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
       gap: 24px;
+      margin-top: 20px;
     }
 
     .card{
@@ -335,18 +366,18 @@
       flex: 1;
       overflow: hidden;
       display: -webkit-box;
-      -webkit-line-clamp: 3;
+      -webkit-line-clamp: 4;
       -webkit-box-orient: vertical;
     }
 
     .empty{
-      max-width: 760px;
+      max-width: 900px;
       margin: 0 auto;
       padding: 18px 20px;
       border-radius: 16px;
-      background: rgba(230,230,230,0.5);
+      background: rgba(230,230,230,0.55);
       border: 1px solid rgba(200,200,200,0.55);
-      color: rgba(10,10,11,0.75);
+      color: rgba(10,10,11,0.78);
       font-size: 15px;
       line-height: 1.7;
       text-align: center;
@@ -434,6 +465,7 @@
       flex: 0 0 auto;
       backdrop-filter: blur(10px);
       font-family: 'EB Garamond', Georgia, serif;
+      text-decoration: none;
     }
 
     .icon-btn:hover{
@@ -472,6 +504,7 @@
       align-items: center;
       justify-content: flex-start;
       gap: 12px;
+      flex-wrap: wrap;
     }
 
     .tiny-heart{
@@ -512,19 +545,20 @@
       .card{ border-radius: 24px; padding: 20px; }
       .panel{ padding: 14px; border-radius: 18px; }
       .textbox{ font-size: 16px; }
+      .bubble{ font-size: 16px; }
     }
 
     @media (max-width: 500px){
       .hero{ padding: 54px 0 48px; }
       .hero p{ font-size: 14px; }
-      .cta{ padding: 14px 22px; font-size: 14px; }
+      .cta{ padding: 14px 22px; font-size: 14px; width: 100%; }
       .card{ padding: 18px; border-radius: 20px; }
       .modal-body{ padding: 20px; }
       .work-h1{ font-size: 24px; }
       .work-text{ font-size: 14px; }
       .modal-head{ padding: 20px 22px; }
-      .row{ align-items: stretch; }
-      .cta{ width: 100%; }
+      .composer{ align-items: stretch; }
+      .textbox{ width: 100%; }
     }
   </style>
 </head>
@@ -536,33 +570,47 @@
       <div class="hero-inner">
         <div class="chip">Resource Navigator</div>
 
-        <h1>"Find support that actually fits"</h1>
+        <h1>Find support that actually fits</h1>
 
         <p>
-          Describe what you are dealing with. You will get a short, focused set of vetted resources, chosen to match your situation, with clear next steps.
+          This is a private, conversational guide built for fatherless teens who want something more precise than generic links.
+          Tell the navigator what is happening, what you are hoping for, and what kind of support feels realistic right now.
+          It will respond thoughtfully and recommend a short list of vetted resources, chosen for fit, not volume.
+          <br><br>
+          If you are in immediate danger, or thinking about harming yourself, call or text <strong>988</strong> right now.
+          This tool is not a crisis service.
         </p>
 
         <div class="panel">
-          <p class="label">What is going on for you right now?</p>
-          <textarea
-            id="message"
-            class="textbox"
-            placeholder="Example: I feel angry about my dad and I do not know how to deal with it. I want someone safe to talk to, not a hotline unless it is urgent."
-          ></textarea>
+          <p class="label">Tell me what you’re carrying right now, in your own words.</p>
 
-          <div class="row">
-            <button id="go" class="cta" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                <polyline points="22 4 12 14.01 9 11.01"></polyline>
-              </svg>
-              Find relevant resources
-            </button>
+          <div class="chat" aria-label="Resource Navigator chat">
+            <div id="messages" class="messages" aria-live="polite"></div>
 
-            <p class="note">
-              If you are in immediate danger or thinking about harming yourself, call or text <strong>988</strong> right now.
-            </p>
+            <div class="composer">
+              <textarea
+                id="message"
+                class="textbox"
+                placeholder="Example: I feel angry about my dad. I want someone safe to talk to, and I want options that feel realistic for a teen."
+              ></textarea>
+
+              <button id="go" class="cta" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                Send
+              </button>
+
+              <button id="clear" class="cta" type="button" style="background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.92); border: 1px solid rgba(255,255,255,0.14);">
+                New chat
+              </button>
+            </div>
           </div>
+
+          <p class="note">
+            Tip: The clearer you are about what you want (someone to talk to, coping skills, grief support, mentorship, a community, therapy options), the better the match.
+          </p>
         </div>
       </div>
     </div>
@@ -571,16 +619,15 @@
   <!-- CONTENT -->
   <section class="content">
     <div class="wrap">
-      <div class="filter-bar">
-        <div class="segmented" role="tablist" aria-label="View options">
-          <button id="tab-recs" class="active" data-filter="recommendations" role="tab" aria-selected="true">Recommendations</button>
-          <button id="tab-all" data-filter="all" role="tab" aria-selected="false">All resources</button>
-          <button id="tab-help" data-filter="how" role="tab" aria-selected="false">How this works</button>
-        </div>
+      <div class="section-head">
+        <h2>Recommended resources</h2>
+        <p>
+          When the navigator suggests resources, they appear here as well, so they are easy to revisit.
+          Click any card to see the full rationale and the direct link.
+        </p>
       </div>
 
-      <div id="status" class="empty" style="display:none;"></div>
-
+      <div id="status" class="empty">Start a conversation above, and your best matches will appear here.</div>
       <div id="grid" class="grid" aria-live="polite"></div>
     </div>
   </section>
@@ -622,7 +669,8 @@
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
           </svg>
         </button>
-        <a id="visitLink" class="icon-btn" href="#" target="_blank" rel="noopener" style="text-decoration:none;">
+
+        <a id="visitLink" class="icon-btn" href="#" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14 3h7v7"></path>
             <path d="M10 14L21 3"></path>
@@ -637,11 +685,10 @@
   <script>
     const elMessage = document.getElementById("message");
     const elGo = document.getElementById("go");
+    const elClear = document.getElementById("clear");
+    const messages = document.getElementById("messages");
     const grid = document.getElementById("grid");
     const statusBox = document.getElementById("status");
-
-    const filterButtons = Array.from(document.querySelectorAll(".segmented button"));
-    let currentView = "recommendations";
 
     const backdrop = document.getElementById("backdrop");
     const closeBtn = document.getElementById("closeBtn");
@@ -652,7 +699,8 @@
     const heartBtn = document.getElementById("heartBtn");
     const visitLink = document.getElementById("visitLink");
 
-    let lastPayload = null;
+    let conversation = [];
+    let lastResources = [];
     let currentCard = null;
 
     function escapeHtml(str){
@@ -674,14 +722,32 @@
       statusBox.textContent = "";
     }
 
+    function scrollChat(){
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function addBubble(role, text){
+      const div = document.createElement("div");
+      div.className = "bubble " + (role === "user" ? "user" : "bot");
+      div.textContent = text;
+      messages.appendChild(div);
+      scrollChat();
+    }
+
+    function formatConversationForApi(){
+      // Lightweight context without requiring backend changes.
+      const tail = conversation.slice(-8);
+      return tail.map(m => `${m.role === "user" ? "User" : "Assistant"}: ${m.text}`).join("\n");
+    }
+
     function normalizeResource(r){
       const title = r.title || r.name || "Resource";
       const url = r.url || r.website || "";
       const why = r.why || r.reason || r.description || "";
-      const tag = r.tag || r.type || "Vetted Resource";
+      const tag = (r.tag || r.type || "Vetted Resource");
 
       const preview = (why || "").trim();
-      const previewShort = preview.length > 140 ? preview.slice(0, 140).trim() + "…" : preview;
+      const previewShort = preview.length > 170 ? preview.slice(0, 170).trim() + "…" : preview;
 
       const details =
         `${preview}\n\n` +
@@ -692,26 +758,19 @@
         title,
         url,
         tag,
-        preview: previewShort || "Click to learn what this is best for and how to use it.",
+        preview: previewShort || "Click to see what this is best for and how to use it.",
         details: details.trim() || "No additional details provided."
       };
     }
 
-    function renderHow(){
-      grid.innerHTML = "";
-      setStatus(
-        "Write a sentence or two about what you need. The navigator sends that message to your private API, which selects a short list of resources from your Google Sheet and explains why each one fits. Your site shows only the results."
-      );
-    }
-
     function renderCards(list){
-      clearStatus();
-
       if (!list || list.length === 0){
         grid.innerHTML = "";
-        setStatus("No results yet. Describe what you need above, then press “Find relevant resources.”");
+        setStatus("No matches yet. Send a message above, and your best matches will appear here.");
         return;
       }
+
+      clearStatus();
 
       grid.innerHTML = list.map(item => `
         <article class="card" data-id="${escapeHtml(item.id)}" tabindex="0" role="button" aria-label="Open ${escapeHtml(item.title)}">
@@ -744,13 +803,7 @@
     }
 
     function openModal(id){
-      if (!lastPayload) return;
-
-      const pool = (currentView === "all")
-        ? (lastPayload.allResources || lastPayload.resources || [])
-        : (lastPayload.resources || []);
-
-      const found = pool.map(normalizeResource).find(x => x.id === id);
+      const found = (lastResources || []).find(x => x.id === id);
       if (!found) return;
 
       currentCard = found;
@@ -790,44 +843,45 @@
       heartBtn.setAttribute("aria-pressed", heartBtn.classList.contains("liked") ? "true" : "false");
     });
 
-    filterButtons.forEach(btn => {
-      btn.addEventListener("click", () => {
-        filterButtons.forEach(b => { b.classList.remove("active"); b.setAttribute("aria-selected", "false"); });
-        btn.classList.add("active");
-        btn.setAttribute("aria-selected", "true");
+    function setSending(isSending){
+      elGo.disabled = isSending;
+      if (isSending){
+        elGo.textContent = "Thinking…";
+      } else {
+        elGo.innerHTML = `
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+          Send
+        `;
+      }
+    }
 
-        currentView = btn.dataset.filter;
-
-        if (currentView === "how"){
-          renderHow();
-          return;
-        }
-
-        const base = lastPayload ? (
-          currentView === "all"
-            ? (lastPayload.allResources || lastPayload.resources || [])
-            : (lastPayload.resources || [])
-        ) : [];
-
-        renderCards(base.map(normalizeResource));
-      });
-    });
-
-    async function run(){
-      const message = (elMessage.value || "").trim();
-      if (!message){
-        setStatus("Write a sentence or two first. The better your description, the more precise the match.");
+    async function send(){
+      const raw = (elMessage.value || "").trim();
+      if (!raw){
+        addBubble("bot", "If you want, start with one sentence. What has been hardest recently?");
         return;
       }
 
-      elGo.disabled = true;
-      elGo.textContent = "Finding the best matches…";
+      // Optimistic UI
+      elMessage.value = "";
+      conversation.push({ role: "user", text: raw });
+      addBubble("user", raw);
+
+      setSending(true);
 
       try{
+        // Send lightweight context so the backend can answer like a chatbot even if it’s stateless.
+        const contextual = formatConversationForApi();
+
         const res = await fetch("/api/navigate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message })
+          body: JSON.stringify({
+            message: contextual
+          })
         });
 
         const data = await res.json();
@@ -835,42 +889,89 @@
           throw new Error(data?.error || "Request failed");
         }
 
-        lastPayload = data;
+        const intro = (data.intro || "").trim();
+        const mode = (data.mode || "recommendations").trim();
 
-        // Default view: recommendations
-        currentView = "recommendations";
-        filterButtons.forEach(b => {
-          const isRec = b.dataset.filter === "recommendations";
-          b.classList.toggle("active", isRec);
-          b.setAttribute("aria-selected", isRec ? "true" : "false");
-        });
+        // Chat response
+        if (intro){
+          conversation.push({ role: "assistant", text: intro });
+          addBubble("bot", intro);
+        } else {
+          const fallback = "I’m here. Tell me a little more about what you want most right now, and I’ll narrow it down carefully.";
+          conversation.push({ role: "assistant", text: fallback });
+          addBubble("bot", fallback);
+        }
 
-        const list = (data.resources || []).map(normalizeResource);
-        renderCards(list);
+        // Resources (aim for 3, but frontend will show whatever backend returns)
+        const list = Array.isArray(data.resources) ? data.resources : [];
+        lastResources = list.map(normalizeResource);
+
+        if (lastResources.length){
+          // A short, elegant bridge line in-chat, then cards below.
+          const bridge =
+            lastResources.length === 1
+              ? "Here is one strong match, chosen for fit."
+              : "Here are the strongest matches, chosen for fit, not volume.";
+
+          conversation.push({ role: "assistant", text: bridge });
+          addBubble("bot", bridge);
+
+          // Also show the resources in-chat, clearly, with links.
+          lastResources.forEach((r, i) => {
+            const block =
+              `${i + 1}. ${r.title}\n` +
+              `${r.preview}\n` +
+              (r.url ? `Website: ${r.url}` : "");
+            conversation.push({ role: "assistant", text: block });
+            addBubble("bot", block);
+          });
+        } else {
+          const none =
+            "I’m not seeing a clean match from the current resource list yet. If you tell me one detail more, I can narrow it down, for example: do you want someone to talk to, practical coping tools, a mentor, or professional support?";
+          conversation.push({ role: "assistant", text: none });
+          addBubble("bot", none);
+        }
+
+        // Render cards in the white section
+        renderCards(lastResources);
         clearStatus();
 
+        // Optional: keep track of mode if your backend uses it later.
+        void mode;
+
       } catch (err){
-        grid.innerHTML = "";
-        setStatus("Something went wrong while fetching matches. Check Vercel Runtime Logs for /api/navigate and confirm your environment variables are set.");
+        addBubble("bot", "Something went wrong while fetching matches. If you are testing, check Vercel Runtime Logs for /api/navigate and confirm your environment variables are set.");
       } finally {
-        elGo.disabled = false;
-        elGo.innerHTML = `
-          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-          </svg>
-          Find relevant resources
-        `;
+        setSending(false);
       }
     }
 
-    elGo.addEventListener("click", run);
+    function resetChat(){
+      conversation = [];
+      messages.innerHTML = "";
+
+      addBubble("bot",
+        "You can start anywhere. If it helps, tell me what you are feeling, what you want, and what kind of support feels realistic right now."
+      );
+
+      lastResources = [];
+      grid.innerHTML = "";
+      setStatus("Start a conversation above, and your best matches will appear here.");
+    }
+
+    elGo.addEventListener("click", send);
+    elClear.addEventListener("click", resetChat);
+
     elMessage.addEventListener("keydown", (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") run();
+      // Enter sends, Shift+Enter adds a new line.
+      if (e.key === "Enter" && !e.shiftKey){
+        e.preventDefault();
+        send();
+      }
     });
 
-    // Initial state
-    setStatus("Describe what you need above, then press “Find relevant resources.”");
+    // Initial
+    resetChat();
   </script>
 </body>
 </html>
