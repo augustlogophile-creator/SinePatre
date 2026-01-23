@@ -5,7 +5,7 @@
 // - OPENAI_API_KEY
 // - GOOGLE_SHEET_CSV_URL  (published CSV export link)
 //
-// This endpoint expects POST JSON:
+// POST JSON:
 // { "message": "..." }
 //
 // Returns:
@@ -21,7 +21,7 @@ const SAFETY_REGEX = [
 ];
 
 // Keep permissive for now so the Squarespace iframe works while testing.
-// After the embed works, we will tighten this to only sinepatre.com.
+// After the embed works, tighten this to only your domain.
 function setCors(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -48,40 +48,9 @@ function normalize(text) {
 
 function tokenize(text) {
   const stop = new Set([
-    "the",
-    "and",
-    "or",
-    "but",
-    "if",
-    "to",
-    "of",
-    "in",
-    "on",
-    "for",
-    "with",
-    "is",
-    "are",
-    "was",
-    "were",
-    "be",
-    "been",
-    "being",
-    "i",
-    "me",
-    "my",
-    "you",
-    "your",
-    "we",
-    "they",
-    "this",
-    "that",
-    "it",
-    "im",
-    "i'm",
-    "dont",
-    "don't",
-    "cant",
-    "can't",
+    "the","and","or","but","if","to","of","in","on","for","with","is","are","was","were","be","been","being",
+    "i","me","my","you","your","we","they","this","that","it","im","i'm","dont","don't","cant","can't",
+    "a","an","at","as","by","from","into","over","than","then","so","just","like","really","very","want",
   ]);
 
   return normalize(text)
@@ -130,8 +99,78 @@ function parseCSV(csv) {
   return rows;
 }
 
-async function loadResources(csvUrl) {
-  const r = await fetch(csvUrl);
+function isCrisisResource(resource) {
+  const t = `${resource.title} ${resource.description} ${resource.when_to_use}`.toLowerCase();
+  return (
+    t.includes("crisis") ||
+    t.includes("suicide") ||
+    t.includes("self-harm") ||
+    t.includes("hotline") ||
+    t.includes("988")
+  );
+}
+
+function scoreResource(resource, queryTokens) {
+  const haystack = tokenize(
+    `${resource.title} ${resource.description} ${resource.best_for} ${resource.fatherlessness_connection} ${resource.when_to_use} ${resource.not_for}`
+  );
+
+  const q = new Set(queryTokens);
+  let score = 0;
+
+  for (const w of haystack) {
+    if (q.has(w)) score += 3;
+  }
+
+  // Boost explicit "talk to someone" intent
+  const raw = `${resource.title} ${resource.description} ${resource.best_for} ${resource.when_to_use}`.toLowerCase();
+  if (
+    raw.includes("peer") ||
+    raw.includes("mentor") ||
+    raw.includes("counsel") ||
+    raw.includes("therap") ||
+    raw.includes("support group") ||
+    raw.includes("talk") ||
+    raw.includes("listen")
+  ) {
+    score += 2;
+  }
+
+  // Small boost for explicit fatherlessness relevance
+  const fatherText = (resource.fatherlessness_connection || "").toLowerCase();
+  if (fatherText.includes("father") || fatherText.includes("dad") || fatherText.includes("fatherless")) {
+    score += 3;
+  }
+
+  return score;
+}
+
+async function fetchWithTimeout(url, opts = {}, ms = 12000) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), ms);
+
+  try {
+    const res = await fetch(url, { ...opts, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+// Cache the sheet across warm invocations to reduce latency.
+async function loadResourcesCached(csvUrl) {
+  const cacheKey = "__SP_RESOURCES_CACHE__";
+  const now = Date.now();
+  const ttlMs = 5 * 60 * 1000;
+
+  const g = globalThis;
+  const cached = g[cacheKey];
+
+  if (cached && cached.expiresAt > now && Array.isArray(cached.data) && cached.data.length) {
+    return cached.data;
+  }
+
+  const r = await fetchWithTimeout(csvUrl, {}, 12000);
   if (!r.ok) throw new Error("Failed to fetch sheet CSV");
   const text = await r.text();
 
@@ -156,7 +195,7 @@ async function loadResources(csvUrl) {
     if (col(c) === -1) throw new Error(`Missing column: ${c}`);
   }
 
-  return rows
+  const data = rows
     .slice(1)
     .map((r2) => ({
       id: (r2[col("id")] || "").trim(),
@@ -169,54 +208,31 @@ async function loadResources(csvUrl) {
       url: (r2[col("url")] || "").trim(),
     }))
     .filter((x) => x.id && x.title && x.url);
-}
 
-function isCrisisResource(resource) {
-  const t = `${resource.title} ${resource.description} ${resource.when_to_use}`.toLowerCase();
-  return (
-    t.includes("crisis") ||
-    t.includes("suicide") ||
-    t.includes("self-harm") ||
-    t.includes("hotline") ||
-    t.includes("988")
-  );
-}
-
-function scoreResource(resource, queryTokens, tagTokens) {
-  const haystack = tokenize(
-    `${resource.title} ${resource.description} ${resource.best_for} ${resource.fatherlessness_connection} ${resource.when_to_use} ${resource.not_for}`
-  );
-
-  let score = 0;
-  for (const w of haystack) {
-    if (queryTokens.includes(w)) score += 3;
-    if (tagTokens.includes(w)) score += 5;
-  }
-
-  // Small boost for explicit fatherlessness relevance
-  const fatherText = (resource.fatherlessness_connection || "").toLowerCase();
-  if (fatherText.includes("father") || fatherText.includes("dad") || fatherText.includes("fatherless")) {
-    score += 4;
-  }
-
-  return score;
+  g[cacheKey] = { data, expiresAt: now + ttlMs };
+  return data;
 }
 
 // OpenAI call: returns JSON object
 async function openaiJSON(apiKey, messages) {
-  const r = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
+  const r = await fetchWithTimeout(
+    "https://api.openai.com/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.4,
+        max_tokens: 450,
+        response_format: { type: "json_object" },
+        messages,
+      }),
     },
-    body: JSON.stringify({
-      model: "gpt-5-mini",
-      // IMPORTANT: do not set temperature for this model (avoid unsupported value errors)
-      response_format: { type: "json_object" },
-      messages,
-    }),
-  });
+    12000
+  );
 
   if (!r.ok) {
     const t = await r.text();
@@ -230,7 +246,6 @@ async function openaiJSON(apiKey, messages) {
 export default async function handler(req, res) {
   setCors(req, res);
 
-  // CORS preflight
   if (req.method === "OPTIONS") {
     res.status(204).end();
     return;
@@ -255,7 +270,7 @@ export default async function handler(req, res) {
   if (triggeredSafety(message)) {
     return send(req, res, 200, {
       mode: "safety",
-      intro: "You deserve immediate support. Please use one of these resources now.",
+      intro: "You deserve immediate support right now. Please use one of these options.",
       resources: [
         { title: "988 Suicide & Crisis Lifeline", url: "https://988lifeline.org", why: "24/7 call or text support in the U.S." },
         { title: "Crisis Text Line", url: "https://www.crisistextline.org", why: "Text-based support with trained counselors." },
@@ -266,68 +281,55 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1) Load resources from your sheet
-    const resources = await loadResources(csvUrl);
+    // 1) Load resources (cached)
+    const resources = await loadResourcesCached(csvUrl);
 
-    // 2) Classify the need into tags + urgency
-    const classification = await openaiJSON(apiKey, [
-      {
-        role: "system",
-        content:
-          "You classify a fatherless teen's need. Output JSON with need_tags (3-6 short phrases), urgency (low|medium|high). Do not give advice.",
-      },
-      { role: "user", content: message },
-    ]);
-
-    const urgency = String(classification.urgency || "low").toLowerCase();
+    // 2) Fast local ranking first (no extra AI classification call)
     const queryTokens = tokenize(message);
-    const tagTokens = tokenize((classification.need_tags || []).join(" "));
 
-    // 3) Rank resources by match score
     const rankedAll = resources
-      .map((r) => ({ r, s: scoreResource(r, queryTokens, tagTokens) }))
+      .map((r) => ({ r, s: scoreResource(r, queryTokens) }))
       .filter((x) => x.s > 0)
       .sort((a, b) => b.s - a.s);
 
-    // 4) Crisis filtering:
-    // If not "high" urgency, remove crisis/hotline resources from recommendations
-    let ranked = rankedAll;
-    if (urgency !== "high") {
-      ranked = rankedAll.filter((x) => !isCrisisResource(x.r));
-      if (!ranked.length) ranked = rankedAll; // fallback if you only had crisis items
-    }
+    // If the user did not indicate crisis, deprioritize obvious crisis resources
+    const rankedNonCrisis = rankedAll.filter((x) => !isCrisisResource(x.r));
+    const shortlist = (rankedNonCrisis.length ? rankedNonCrisis : rankedAll).slice(0, 10).map((x) => x.r);
 
-    const top = ranked.slice(0, 6).map((x) => x.r);
-
-    if (!top.length) {
+    if (!shortlist.length) {
       return send(req, res, 200, {
         mode: "no_match",
-        intro: "I could not find a strong match yet. Try describing what you want help with in more detail.",
+        intro: "I could not find a strong match yet. Add one detail about what you want (someone to talk to, grief, anxiety, school stress, mentorship).",
         resources: [],
       });
     }
 
-    // 5) Ask AI to write the final response using ONLY these resources
+    // 3) One single AI call to craft a clean, short, high-fit set (fast)
     const response = await openaiJSON(apiKey, [
       {
         role: "system",
         content:
-          "You recommend resources for a fatherless teen. Use ONLY the provided resources. Do not give personal advice. Return JSON: { intro: string, resources: [{title, url, why}] }.",
+          "You are SinePatre Navigator. You recommend resources for fatherless teens.\n" +
+          "Rules:\n" +
+          "- Use ONLY the provided resources.\n" +
+          "- Do not give personal advice, diagnosis, or therapy.\n" +
+          "- Be concise, calm, and sophisticated.\n" +
+          "- Return JSON: { intro: string, resources: [{title: string, url: string, why: string}] }.\n" +
+          "- Choose 3 to 6 resources max.\n" +
+          "- Each 'why' must be 1 sentence and action-oriented.",
       },
       {
         role: "user",
         content: JSON.stringify({
           message,
-          urgency,
-          need_tags: classification.need_tags || [],
-          resources: top,
+          resources: shortlist,
         }),
       },
     ]);
 
     return send(req, res, 200, {
       mode: "recommendations",
-      intro: response.intro || "Here are resources that best match what you shared.",
+      intro: response.intro || "Here are a few high-fit options based on what you shared.",
       resources: Array.isArray(response.resources) ? response.resources : [],
     });
   } catch (err) {
