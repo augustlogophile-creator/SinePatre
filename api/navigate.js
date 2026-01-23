@@ -145,7 +145,9 @@ function scoreResource(resource, queryTokens) {
   return score;
 }
 
-async function fetchWithTimeout(url, opts = {}, ms = 12000) {
+// We keep timeouts very generous to avoid user-facing "took too long" behavior.
+// (Serverless platforms still have their own hard limits.)
+async function fetchWithTimeout(url, opts = {}, ms = 90000) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), ms);
 
@@ -170,7 +172,7 @@ async function loadResourcesCached(csvUrl) {
     return cached.data;
   }
 
-  const r = await fetchWithTimeout(csvUrl, {}, 12000);
+  const r = await fetchWithTimeout(csvUrl, {}, 90000);
   if (!r.ok) throw new Error("Failed to fetch sheet CSV");
   const text = await r.text();
 
@@ -213,7 +215,6 @@ async function loadResourcesCached(csvUrl) {
   return data;
 }
 
-// OpenAI call: returns JSON object
 async function openaiJSON(apiKey, messages) {
   const r = await fetchWithTimeout(
     "https://api.openai.com/v1/chat/completions",
@@ -225,13 +226,13 @@ async function openaiJSON(apiKey, messages) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        temperature: 0.4,
-        max_tokens: 450,
+        temperature: 0.55,
+        max_tokens: 900,
         response_format: { type: "json_object" },
         messages,
       }),
     },
-    12000
+    90000
   );
 
   if (!r.ok) {
@@ -266,7 +267,6 @@ export default async function handler(req, res) {
   if (!message) return send(req, res, 400, { error: "Missing message" });
   if (message.length > MAX_MESSAGE_LENGTH) return send(req, res, 400, { error: "Message too long" });
 
-  // Hard safety gate: skip AI, return crisis resources only
   if (triggeredSafety(message)) {
     return send(req, res, 200, {
       mode: "safety",
@@ -281,10 +281,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1) Load resources (cached)
     const resources = await loadResourcesCached(csvUrl);
 
-    // 2) Fast local ranking first (no extra AI classification call)
     const queryTokens = tokenize(message);
 
     const rankedAll = resources
@@ -292,7 +290,6 @@ export default async function handler(req, res) {
       .filter((x) => x.s > 0)
       .sort((a, b) => b.s - a.s);
 
-    // If the user did not indicate crisis, deprioritize obvious crisis resources
     const rankedNonCrisis = rankedAll.filter((x) => !isCrisisResource(x.r));
     const shortlist = (rankedNonCrisis.length ? rankedNonCrisis : rankedAll).slice(0, 10).map((x) => x.r);
 
@@ -304,19 +301,20 @@ export default async function handler(req, res) {
       });
     }
 
-    // 3) One single AI call to craft a clean, short, high-fit set (fast)
     const response = await openaiJSON(apiKey, [
       {
         role: "system",
         content:
-          "You are SinePatre Navigator. You recommend resources for fatherless teens.\n" +
+          "You are the SinePatre Resource Navigator.\n" +
+          "Purpose: Recommend support options to fatherless teens using ONLY a curated database provided in the prompt.\n\n" +
           "Rules:\n" +
-          "- Use ONLY the provided resources.\n" +
-          "- Do not give personal advice, diagnosis, or therapy.\n" +
-          "- Be concise, calm, and sophisticated.\n" +
-          "- Return JSON: { intro: string, resources: [{title: string, url: string, why: string}] }.\n" +
-          "- Choose 3 to 6 resources max.\n" +
-          "- Each 'why' must be 1 sentence and action-oriented.",
+          "- Use ONLY the provided resources. Do not invent names, hotlines, or websites.\n" +
+          "- Do not give medical, legal, or therapeutic instructions. Do not diagnose.\n" +
+          "- Be calm, respectful, and eloquent.\n" +
+          "- Choose EXACTLY 3 resources.\n" +
+          "- For each resource, write a comprehensive overview in 3 to 6 sentences that explains what it is, who it fits, why it matches the user's message, and what the user can do next.\n" +
+          "- Return JSON only in this shape:\n" +
+          '{ "intro": "string", "resources": [ { "title": "string", "url": "string", "why": "string" }, ... ] }',
       },
       {
         role: "user",
@@ -327,10 +325,12 @@ export default async function handler(req, res) {
       },
     ]);
 
+    const safeResources = Array.isArray(response.resources) ? response.resources.slice(0, 3) : [];
+
     return send(req, res, 200, {
       mode: "recommendations",
-      intro: response.intro || "Here are a few high-fit options based on what you shared.",
-      resources: Array.isArray(response.resources) ? response.resources : [],
+      intro: response.intro || "Here are three high-fit options from a curated database, matched to what you shared.",
+      resources: safeResources,
     });
   } catch (err) {
     const msg = String(err?.message || err);
