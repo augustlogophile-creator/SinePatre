@@ -1,4 +1,4 @@
-<!-- navigator.html (same changes as index) -->
+<!-- navigator.html (same design and behavior) -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -11,22 +11,21 @@
 
     :root{
       --bg: #0f0f10;
-      --panel: rgba(255,255,255,0.045);
-      --border: rgba(255,255,255,0.10);
       --text: rgba(255,255,255,0.92);
-      --muted: rgba(255,255,255,0.70);
-      --muted2: rgba(255,255,255,0.55);
+      --muted: rgba(255,255,255,0.68);
+      --muted2: rgba(255,255,255,0.52);
+      --hair: rgba(255,255,255,0.10);
 
       --navy: #1f2f5a;
-      --navyHover: #24386c;
+      --navyHover: #263a70;
 
-      --userBubble: #f2f2f2;
-      --userText: #101010;
+      --inputBg: rgba(255,255,255,0.06);
+      --inputBorder: rgba(255,255,255,0.10);
 
-      --aiBubble: #1b1b1d;
-      --aiText: rgba(255,255,255,0.92);
+      --userBubbleBg: rgba(255,255,255,0.12);
+      --userBubbleBorder: rgba(255,255,255,0.14);
 
-      --shadow: 0 18px 70px rgba(0,0,0,0.55);
+      --assistantText: rgba(255,255,255,0.92);
     }
 
     *{ box-sizing: border-box; }
@@ -34,38 +33,36 @@
     body{
       margin: 0;
       font-family: 'EB Garamond', Georgia, serif;
-      background: radial-gradient(1200px 800px at 70% -20%, rgba(255,255,255,0.08), transparent 55%),
-                  radial-gradient(900px 650px at -10% 110%, rgba(255,255,255,0.06), transparent 60%),
-                  var(--bg);
+      background:
+        radial-gradient(1200px 800px at 70% -10%, rgba(255,255,255,0.08), transparent 55%),
+        radial-gradient(900px 650px at -10% 115%, rgba(255,255,255,0.06), transparent 60%),
+        var(--bg);
       color: var(--text);
       letter-spacing: -0.01em;
     }
 
     .page{
       min-height: 100vh;
-      display: grid;
-      place-items: center;
-      padding: 42px 18px;
+      display: flex;
+      flex-direction: column;
     }
 
-    .wrap{ width: min(920px, 100%); }
-
-    .descBox{
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      box-shadow: var(--shadow);
-      padding: 22px 18px;
+    .top{
+      width: min(980px, 100%);
+      margin: 0 auto;
+      padding: 46px 20px 0;
       text-align: center;
     }
 
-    .brand{
+    .chip{
       display: inline-flex;
       align-items: center;
-      justify-content: center;
-      gap: 12px;
-      margin-bottom: 8px;
-      color: var(--text);
+      gap: 10px;
+      color: var(--muted2);
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
     }
 
     .mark{
@@ -85,113 +82,149 @@
     }
 
     h1{
-      margin: 0;
+      margin: 0 0 12px;
       font-weight: 500;
-      font-size: 54px;
-      line-height: 1.06;
+      font-size: clamp(40px, 6.2vw, 64px);
+      line-height: 1.04;
       letter-spacing: -0.03em;
     }
 
-    h1 a{
-      color: inherit;
-      text-decoration: none;
-      border-bottom: 1px solid rgba(255,255,255,0.18);
-      padding-bottom: 2px;
-    }
-    h1 a:hover{
-      border-bottom-color: rgba(255,255,255,0.34);
-    }
-
-    .sub{
-      margin: 10px auto 0;
-      max-width: 820px;
+    .desc{
+      margin: 0 auto;
+      max-width: 860px;
       color: var(--muted);
-      font-size: 17px;
-      line-height: 1.60;
+      font-size: 18px;
+      line-height: 1.62;
     }
 
-    .sub strong{ color: rgba(255,255,255,0.90); font-weight: 700; }
+    .desc strong{ color: rgba(255,255,255,0.90); font-weight: 700; }
 
-    .chatWrap{
-      margin-top: 18px;
+    .messages{
+      width: min(980px, 100%);
+      margin: 0 auto;
+      padding: 26px 20px 140px;
+      flex: 1;
     }
 
-    .panel{
-      background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(255,255,255,0.08);
+    .msgRow{ display: flex; margin: 18px 0; }
+    .msgRow.user{ justify-content: flex-end; }
+    .msgRow.assistant{ justify-content: flex-start; }
+
+    .userBubble{
+      max-width: min(560px, 92%);
+      background: var(--userBubbleBg);
+      border: 1px solid var(--userBubbleBorder);
       border-radius: 18px;
-      overflow: hidden;
-    }
-
-    .chat{
-      height: min(52vh, 520px);
-      overflow: auto;
-      padding: 18px 16px 12px;
-      background: rgba(0,0,0,0.14);
-    }
-
-    .bubbleRow{
-      display: flex;
-      margin: 9px 0;
-    }
-
-    .bubbleRow.user{ justify-content: flex-start; }
-    .bubbleRow.ai{ justify-content: flex-end; }
-
-    .bubble{
-      max-width: min(660px, 92%);
-      padding: 11px 13px;
-      border-radius: 16px;
+      padding: 10px 14px;
       font-size: 16.5px;
       line-height: 1.55;
+      color: rgba(255,255,255,0.92);
       white-space: pre-wrap;
       overflow-wrap: anywhere;
+    }
+
+    .assistantBlock{
+      max-width: min(760px, 96%);
+      font-size: 16.5px;
+      line-height: 1.62;
+      color: var(--assistantText);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .assistantMeta{
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted2);
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .assistantActions{
+      display: inline-flex;
+      gap: 10px;
+      margin-top: 10px;
+      opacity: 0.8;
+    }
+
+    .actionBtn{
+      width: 30px;
+      height: 30px;
+      border-radius: 10px;
       border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.04);
+      color: rgba(255,255,255,0.78);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 140ms ease, transform 140ms ease, border-color 140ms ease;
+      user-select: none;
     }
 
-    .bubble.user{
-      background: var(--userBubble);
-      color: var(--userText);
-      border-color: rgba(0,0,0,0.10);
+    .actionBtn:hover{
+      background: rgba(255,255,255,0.07);
+      border-color: rgba(255,255,255,0.14);
+      transform: translateY(-1px);
     }
 
-    .bubble.ai{
-      background: var(--aiBubble);
-      color: var(--aiText);
-      border-color: rgba(255,255,255,0.10);
+    .actionBtn svg{
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .composerWrap{
+      position: sticky;
+      bottom: 0;
+      padding: 18px 0 26px;
+      background: linear-gradient(to top, rgba(15,15,16,0.94), rgba(15,15,16,0.70), transparent);
+      backdrop-filter: blur(8px);
     }
 
     .composer{
-      padding: 14px;
-      border-top: 1px solid rgba(255,255,255,0.08);
-      display: flex;
-      gap: 12px;
-      align-items: flex-end;
-      background: rgba(255,255,255,0.02);
+      width: min(980px, 100%);
+      margin: 0 auto;
+      padding: 0 20px;
     }
 
-    .input{
-      flex: 1;
-      border-radius: 16px;
-      border: 1px solid rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.04);
+    .bar{
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 12px;
+      align-items: end;
+      border-radius: 22px;
+      border: 1px solid var(--inputBorder);
+      background: rgba(255,255,255,0.05);
       padding: 12px 12px;
-      color: var(--text);
+    }
+
+    textarea{
+      width: 100%;
+      border: 0;
       outline: none;
+      background: transparent;
+      color: var(--text);
       font-family: 'EB Garamond', Georgia, serif;
       font-size: 17px;
       line-height: 1.45;
       resize: none;
-      min-height: 50px;
+      min-height: 28px;
       max-height: 160px;
       overflow: auto;
+      padding: 6px 8px;
     }
 
-    .input::placeholder{ color: rgba(255,255,255,0.50); }
+    textarea::placeholder{ color: rgba(255,255,255,0.48); }
 
     .btn{
-      width: 46px;
-      height: 46px;
+      width: 42px;
+      height: 42px;
       border-radius: 14px;
       border: 1px solid rgba(255,255,255,0.12);
       background: rgba(255,255,255,0.05);
@@ -200,9 +233,9 @@
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      transition: transform 150ms ease, background 150ms ease, border-color 150ms ease, opacity 150ms ease;
-      user-select: none;
+      transition: background 150ms ease, transform 150ms ease, border-color 150ms ease, opacity 150ms ease;
       position: relative;
+      user-select: none;
     }
 
     .btn:hover{
@@ -214,18 +247,10 @@
     .btn.primary{
       background: var(--navy);
       border-color: rgba(255,255,255,0.10);
-      color: rgba(255,255,255,0.96);
     }
+    .btn.primary:hover{ background: var(--navyHover); }
 
-    .btn.primary:hover{
-      background: var(--navyHover);
-    }
-
-    .btn:disabled{
-      opacity: 0.55;
-      cursor: not-allowed;
-      transform: none;
-    }
+    .btn:disabled{ opacity: 0.55; cursor: not-allowed; transform: none; }
 
     .btn svg{
       width: 18px;
@@ -240,7 +265,7 @@
     .btn[data-tip]::after{
       content: attr(data-tip);
       position: absolute;
-      bottom: 56px;
+      bottom: 54px;
       right: 0;
       background: rgba(10,10,11,0.92);
       color: rgba(255,255,255,0.92);
@@ -256,135 +281,159 @@
       transition: opacity 140ms ease, transform 140ms ease;
       box-shadow: 0 16px 40px rgba(0,0,0,0.35);
     }
+    .btn[data-tip]:hover::after{ opacity: 1; transform: translateY(0); }
 
-    .btn[data-tip]:hover::after{
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    .foot{
-      margin: 10px 4px 0;
+    .tip{
+      width: min(980px, 100%);
+      margin: 10px auto 0;
+      padding: 0 20px;
       color: var(--muted2);
       font-size: 14px;
-      line-height: 1.45;
       text-align: center;
-    }
-
-    @media (max-width: 820px){
-      h1{ font-size: clamp(36px, 7vw, 50px); }
-      .sub{ font-size: 16px; }
-      .bubble{ font-size: 16px; }
+      line-height: 1.45;
     }
   </style>
 </head>
 
 <body>
-  <main class="page">
-    <div class="wrap">
-      <section class="descBox" aria-label="Description">
-        <div class="brand" aria-label="SinePatre Resource Navigator">
-          <span class="mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path d="M12 2v6"></path>
-              <path d="M12 16v6"></path>
-              <path d="M2 12h6"></path>
-              <path d="M16 12h6"></path>
-              <path d="M4.6 4.6l4.2 4.2"></path>
-              <path d="M15.2 15.2l4.2 4.2"></path>
-              <path d="M19.4 4.6l-4.2 4.2"></path>
-              <path d="M8.8 15.2l-4.2 4.2"></path>
-              <circle cx="12" cy="12" r="2.3"></circle>
+  <div class="page">
+    <header class="top">
+      <div class="chip">
+        <span class="mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 2v6"></path>
+            <path d="M12 16v6"></path>
+            <path d="M2 12h6"></path>
+            <path d="M16 12h6"></path>
+            <circle cx="12" cy="12" r="2.3"></circle>
+          </svg>
+        </span>
+        SinePatre
+      </div>
+
+      <h1>Resource Navigator</h1>
+
+      <p class="desc">
+        A private guide built on a curated database of vetted support options for fatherless teens.
+        Share what is happening, what you want next, and what feels realistic right now.
+        You will receive three high-fit recommendations, each explained clearly so you can decide what to do next.
+        If you are in immediate danger or thinking about harming yourself, call or text <strong>988</strong>.
+      </p>
+    </header>
+
+    <main id="messages" class="messages" aria-live="polite" aria-label="Chat messages"></main>
+
+    <div class="composerWrap">
+      <div class="composer">
+        <div class="bar" role="group" aria-label="Message composer">
+          <textarea
+            id="input"
+            placeholder="What do you want help with?"
+            rows="1"
+          ></textarea>
+
+          <button id="newChat" class="btn" type="button" data-tip="Start new chat" aria-label="Start new chat">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14"></path>
+              <path d="M5 12h14"></path>
             </svg>
-          </span>
-          <div style="color: var(--muted2); font-size: 14px; letter-spacing: 0.06em;">SinePatre</div>
+          </button>
+
+          <button id="send" class="btn primary" type="button" data-tip="Send" aria-label="Send">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 12h13"></path>
+              <path d="M13 5l7 7-7 7"></path>
+            </svg>
+          </button>
         </div>
 
-        <h1><a href="https://sinepatre.com" target="_blank" rel="noreferrer">Resource Navigator</a></h1>
-
-        <p class="sub">
-          A private guide built on a curated database of vetted support options for fatherless teens.
-          Share what is happening, what you want next, and what feels realistic right now.
-          You will receive a short, high-fit set of recommendations, each explained clearly so you can choose with confidence.
-          If you are in immediate danger or thinking about harming yourself, call or text <strong>988</strong>.
-        </p>
-      </section>
-
-      <div class="chatWrap">
-        <section class="panel" aria-label="Chat panel">
-          <div id="chat" class="chat" aria-live="polite" aria-label="Chat transcript"></div>
-
-          <div class="composer" role="group" aria-label="Message composer">
-            <textarea
-              id="input"
-              class="input"
-              rows="1"
-              placeholder="What do you want help with?"
-            ></textarea>
-
-            <button id="newChat" class="btn" type="button" data-tip="Start new chat" aria-label="Start new chat">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 5v14"></path>
-                <path d="M5 12h14"></path>
-              </svg>
-            </button>
-
-            <button id="send" class="btn primary" type="button" data-tip="Send" aria-label="Send">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M5 12h13"></path>
-                <path d="M13 5l7 7-7 7"></path>
-              </svg>
-            </button>
-          </div>
-        </section>
-
-        <div class="foot">
+        <div class="tip">
           Tip: Include one concrete detail, for example “someone to talk to,” “grief,” “anger,” “school stress,” or “mentorship.”
         </div>
       </div>
     </div>
-  </main>
+  </div>
 
   <script>
-    const chatEl = document.getElementById("chat");
+    const messagesEl = document.getElementById("messages");
     const inputEl = document.getElementById("input");
     const sendBtn = document.getElementById("send");
     const newChatBtn = document.getElementById("newChat");
-
-    let history = [];
-
-    function appendBubble(role, text){
-      const row = document.createElement("div");
-      row.className = "bubbleRow " + (role === "assistant" ? "ai" : "user");
-
-      const bubble = document.createElement("div");
-      bubble.className = "bubble " + (role === "assistant" ? "ai" : "user");
-      bubble.textContent = text;
-
-      row.appendChild(bubble);
-      chatEl.appendChild(row);
-      chatEl.scrollTop = chatEl.scrollHeight;
-    }
-
-    function setBusy(isBusy){
-      sendBtn.disabled = isBusy;
-      newChatBtn.disabled = isBusy;
-    }
 
     function autoGrow(el){
       el.style.height = "auto";
       el.style.height = Math.min(el.scrollHeight, 160) + "px";
     }
 
-    function resetComposer(){
-      inputEl.value = "";
-      inputEl.style.height = "auto";
-      inputEl.focus();
+    function setBusy(b){
+      sendBtn.disabled = b;
+      newChatBtn.disabled = b;
+    }
+
+    function scrollBottom(){
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
     }
 
     function clearChat(){
-      chatEl.innerHTML = "";
-      history = [];
-      resetComposer();
+      messagesEl.innerHTML = "";
+      inputEl.value = "";
+      autoGrow(inputEl);
+      inputEl.focus();
+    }
+
+    function addUser(text){
+      const row = document.createElement("div");
+      row.className = "msgRow user";
+
+      const bubble = document.createElement("div");
+      bubble.className = "userBubble";
+      bubble.textContent = text;
+
+      row.appendChild(bubble);
+      messagesEl.appendChild(row);
+    }
+
+    function addAssistant(text, { isTyping = false } = {}){
+      const row = document.createElement("div");
+      row.className = "msgRow assistant";
+
+      const block = document.createElement("div");
+      block.className = "assistantBlock";
+
+      const meta = document.createElement("div");
+      meta.className = "assistantMeta";
+      meta.textContent = "Navigator";
+
+      const content = document.createElement("div");
+      content.textContent = text;
+
+      block.appendChild(meta);
+      block.appendChild(content);
+
+      if (!isTyping){
+        const actions = document.createElement("div");
+        actions.className = "assistantActions";
+
+        const copyBtn = document.createElement("button");
+        copyBtn.className = "actionBtn";
+        copyBtn.type = "button";
+        copyBtn.title = "Copy";
+        copyBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 9h10v10H9z"></path>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>`;
+        copyBtn.addEventListener("click", async () => {
+          try { await navigator.clipboard.writeText(text); } catch {}
+        });
+
+        actions.appendChild(copyBtn);
+        block.appendChild(actions);
+      }
+
+      row.appendChild(block);
+      messagesEl.appendChild(row);
+      return row;
     }
 
     function formatReply(data){
@@ -397,10 +446,11 @@
       if (resources.length){
         lines.push("");
         resources.slice(0, 3).forEach((r, i) => {
-          const title = r.title || "Resource";
-          const why = r.why ? String(r.why).trim() : "";
-          const url = r.url ? String(r.url).trim() : "";
-          lines.push((i + 1) + ". " + title + (url ? " — " + url : ""));
+          const title = (r.title || "Resource").trim();
+          const url = (r.url || "").trim();
+          const why = (r.why || "").trim();
+
+          lines.push(`${i + 1}. ${title}${url ? " — " + url : ""}`);
           if (why) lines.push(why);
           lines.push("");
         });
@@ -413,24 +463,14 @@
       const message = (inputEl.value || "").trim();
       if (!message) return;
 
-      appendBubble("user", message);
-      history.push({ role: "user", content: message });
-
-      resetComposer();
+      addUser(message);
+      inputEl.value = "";
+      autoGrow(inputEl);
       setBusy(true);
+      scrollBottom();
 
-      const typingId = "typing-" + Math.random().toString(16).slice(2);
-      const typingRow = document.createElement("div");
-      typingRow.className = "bubbleRow ai";
-      typingRow.id = typingId;
-
-      const typingBubble = document.createElement("div");
-      typingBubble.className = "bubble ai";
-      typingBubble.textContent = "Thinking...";
-
-      typingRow.appendChild(typingBubble);
-      chatEl.appendChild(typingRow);
-      chatEl.scrollTop = chatEl.scrollHeight;
+      const typingRow = addAssistant("Thinking...", { isTyping: true });
+      scrollBottom();
 
       try{
         const res = await fetch("/api/navigate", {
@@ -444,21 +484,16 @@
           throw new Error(data?.error || data?.detail || "Request failed");
         }
 
-        const t = document.getElementById(typingId);
-        if (t) t.remove();
+        typingRow.remove();
 
-        const reply = formatReply(data) || "I received an empty response from the server. Check Vercel logs for /api/navigate.";
-        appendBubble("assistant", reply);
-        history.push({ role: "assistant", content: reply });
+        const reply = formatReply(data) || "I did not receive a usable reply. Please try again.";
+        addAssistant(reply);
+        scrollBottom();
 
-      } catch (err){
-        const t = document.getElementById(typingId);
-        if (t) t.remove();
-
-        const msg = "I could not load recommendations right now. Please try again in a moment.";
-        appendBubble("assistant", msg);
-        history.push({ role: "assistant", content: msg });
-
+      } catch (e){
+        typingRow.remove();
+        addAssistant("I could not load recommendations right now. Please try again in a moment.");
+        scrollBottom();
       } finally {
         setBusy(false);
         inputEl.focus();
