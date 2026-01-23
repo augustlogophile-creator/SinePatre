@@ -1,3 +1,4 @@
+<!-- navigator.html (same aesthetics as index.html) -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -10,467 +11,442 @@
 
     :root{
       --bg: #0f0f10;
-      --panel: rgba(255,255,255,0.06);
-      --panelBorder: rgba(255,255,255,0.12);
-      --muted: rgba(255,255,255,0.70);
-      --muted2: rgba(255,255,255,0.50);
-      --hairline: rgba(255,255,255,0.10);
+      --text: rgba(255,255,255,0.92);
+      --muted: rgba(255,255,255,0.68);
+      --muted2: rgba(255,255,255,0.52);
 
-      --youBg: rgba(255,255,255,0.92);
-      --youText: #111;
+      --navy: #1f2f5a;
+      --navyHover: #263a70;
 
-      --aiBg: rgba(0,0,0,0.24);
-      --aiText: rgba(255,255,255,0.92);
-
-      --btnBg: rgba(255,255,255,0.06);
-      --btnBorder: rgba(255,255,255,0.14);
-      --btnHover: rgba(255,255,255,0.10);
-
-      --shadow: rgba(0,0,0,0.28);
+      --inputBorder: rgba(255,255,255,0.10);
+      --userBubbleBg: rgba(255,255,255,0.12);
+      --userBubbleBorder: rgba(255,255,255,0.14);
     }
 
     *{ box-sizing: border-box; }
     html, body { height: 100%; }
+
     body{
       margin: 0;
-      background: var(--bg);
-      color: #fff;
       font-family: 'EB Garamond', Georgia, serif;
+      background:
+        radial-gradient(1200px 800px at 70% -10%, rgba(255,255,255,0.08), transparent 55%),
+        radial-gradient(900px 650px at -10% 115%, rgba(255,255,255,0.06), transparent 60%),
+        var(--bg);
+      color: var(--text);
       letter-spacing: -0.01em;
     }
 
-    .bgGlow::before{
-      content: "";
-      position: fixed;
-      inset: -40% -20% auto auto;
-      width: 720px;
-      height: 720px;
-      background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%);
-      pointer-events: none;
-      z-index: 0;
-    }
-    .bgGlow::after{
-      content: "";
-      position: fixed;
-      inset: auto auto -42% -18%;
-      width: 660px;
-      height: 660px;
-      background: radial-gradient(circle, rgba(255,255,255,0.035) 0%, transparent 70%);
-      pointer-events: none;
-      z-index: 0;
-    }
-
-    .wrap{
-      position: relative;
-      z-index: 1;
-      width: min(980px, calc(100% - 48px));
-      margin: 0 auto;
-      padding: 44px 0 54px;
+    .page{
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
 
     .top{
+      width: min(980px, 100%);
+      margin: 0 auto;
+      padding: 46px 20px 0;
       text-align: center;
-      margin-bottom: 22px;
     }
 
-    .markRow{
+    .chip{
       display: inline-flex;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 10px;
-      opacity: 0.95;
+      gap: 10px;
+      color: var(--muted2);
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
     }
 
     .mark{
-      width: 26px;
-      height: 26px;
-      border-radius: 999px;
-      border: 1px solid rgba(255,255,255,0.22);
-      background: rgba(255,255,255,0.06);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+      width: 18px;
+      height: 18px;
+      display: inline-block;
     }
-
     .mark svg{
-      width: 16px;
-      height: 16px;
-      stroke: rgba(255,255,255,0.78);
-      stroke-width: 2;
+      width: 18px;
+      height: 18px;
+      display: block;
+      stroke: var(--navy);
       fill: none;
+      stroke-width: 2;
       stroke-linecap: round;
       stroke-linejoin: round;
     }
 
-    .chip{
-      font-size: 12px;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.72);
-      border: 1px solid rgba(255,255,255,0.22);
-      padding: 8px 16px;
-      border-radius: 999px;
-      background: transparent;
-    }
-
     h1{
-      margin: 10px 0 12px;
+      margin: 0 0 12px;
       font-weight: 500;
-      font-size: clamp(34px, 4.8vw, 56px);
-      line-height: 1.08;
-      letter-spacing: -0.02em;
+      font-size: clamp(40px, 6.2vw, 64px);
+      line-height: 1.04;
+      letter-spacing: -0.03em;
     }
 
     .desc{
       margin: 0 auto;
-      max-width: 780px;
+      max-width: 860px;
       color: var(--muted);
-      font-size: 17px;
-      line-height: 1.65;
+      font-size: 18px;
+      line-height: 1.62;
     }
 
-    .desc strong{
-      color: rgba(255,255,255,0.92);
-      font-weight: 700;
-    }
+    .desc strong{ color: rgba(255,255,255,0.90); font-weight: 700; }
 
-    .shell{
-      margin: 26px auto 0;
-      max-width: 900px;
-      background: var(--panel);
-      border: 1px solid var(--panelBorder);
-      border-radius: 22px;
-      box-shadow: 0 18px 60px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.06);
-      overflow: hidden;
-    }
-
-    .chat{
-      padding: 16px 16px 10px;
-      height: min(58vh, 560px);
-      overflow: auto;
-    }
-
-    .divider{ height: 1px; background: var(--hairline); }
-
-    .row{
-      display: flex;
-      gap: 10px;
-      align-items: flex-end;
-      padding: 12px;
-    }
-
-    .inputWrap{
+    .messages{
+      width: min(980px, 100%);
+      margin: 0 auto;
+      padding: 26px 20px 160px;
       flex: 1;
+    }
+
+    .msgRow{ display: flex; margin: 18px 0; }
+    .msgRow.user{ justify-content: flex-end; }
+    .msgRow.assistant{ justify-content: flex-start; }
+
+    .userBubble{
+      max-width: min(560px, 92%);
+      background: var(--userBubbleBg);
+      border: 1px solid var(--userBubbleBorder);
+      border-radius: 18px;
+      padding: 10px 14px;
+      font-size: 16px;
+      line-height: 1.55;
+      color: rgba(255,255,255,0.92);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .assistantBlock{
+      max-width: min(760px, 96%);
+      font-size: 16px;
+      line-height: 1.62;
+      color: rgba(255,255,255,0.92);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .assistantMeta{
+      color: var(--muted2);
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .composerWrap{
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 18px 0 26px;
+      background: rgba(15,15,16,0.92);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .composer{
+      width: min(980px, 100%);
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    .bar{
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 12px;
+      align-items: end;
+      border-radius: 22px;
+      border: 1px solid var(--inputBorder);
       background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 16px;
-      padding: 10px 12px;
-      min-height: 52px;
+      padding: 12px 12px;
     }
 
     textarea{
       width: 100%;
-      border: none;
+      border: 0;
       outline: none;
-      resize: none;
       background: transparent;
-      color: rgba(255,255,255,0.90);
+      color: var(--text);
       font-family: 'EB Garamond', Georgia, serif;
-      font-size: 18px;
-      line-height: 1.5;
-      padding: 0;
-      margin: 0;
-      min-height: 30px;
-      max-height: 140px;
+      font-size: 17px;
+      line-height: 1.45;
+      resize: none;
+      min-height: 28px;
+      max-height: 160px;
+      overflow: auto;
+      padding: 6px 8px;
     }
 
-    textarea::placeholder{ color: rgba(255,255,255,0.45); }
+    textarea::placeholder{ color: rgba(255,255,255,0.48); }
 
-    .miniActions{
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
-
-    .circleBtn{
+    .btn{
       width: 42px;
       height: 42px;
-      border-radius: 999px;
-      border: 1px solid var(--btnBorder);
-      background: var(--btnBg);
-      color: rgba(255,255,255,0.88);
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.05);
+      color: rgba(255,255,255,0.92);
       display: inline-flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+      transition: background 150ms ease, transform 150ms ease, border-color 150ms ease, opacity 150ms ease;
       position: relative;
       user-select: none;
     }
 
-    .circleBtn:hover{
+    .btn:hover{
       transform: translateY(-1px);
-      background: var(--btnHover);
-      border-color: rgba(255,255,255,0.20);
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.16);
     }
 
-    .circleBtn:disabled{
-      opacity: 0.55;
-      cursor: not-allowed;
-      transform: none;
+    .btn.primary{
+      background: var(--navy);
+      border-color: rgba(255,255,255,0.10);
     }
+    .btn.primary:hover{ background: var(--navyHover); }
 
-    .circleBtn svg{
+    .btn:disabled{ opacity: 0.55; cursor: not-allowed; transform: none; }
+
+    .btn svg{
       width: 18px;
       height: 18px;
+      fill: none;
       stroke: currentColor;
       stroke-width: 2;
-      fill: none;
       stroke-linecap: round;
       stroke-linejoin: round;
     }
 
-    .tooltip{
+    .btn[data-tip]::after{
+      content: attr(data-tip);
       position: absolute;
-      left: 50%;
-      bottom: 52px;
-      transform: translateX(-50%);
+      bottom: 54px;
+      right: 0;
       background: rgba(10,10,11,0.92);
-      border: 1px solid rgba(255,255,255,0.14);
       color: rgba(255,255,255,0.92);
-      padding: 7px 10px;
+      border: 1px solid rgba(255,255,255,0.14);
+      padding: 8px 10px;
       border-radius: 10px;
-      font-size: 12px;
-      letter-spacing: 0.02em;
+      font-size: 13px;
+      line-height: 1.2;
       white-space: nowrap;
       opacity: 0;
+      transform: translateY(6px);
       pointer-events: none;
-      transition: opacity 140ms ease;
+      transition: opacity 140ms ease, transform 140ms ease;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.35);
     }
+    .btn[data-tip]:hover::after{ opacity: 1; transform: translateY(0); }
 
-    .circleBtn:hover .tooltip{ opacity: 1; }
-
-    .hint{
-      padding: 10px 16px 14px;
+    .tip{
+      width: min(980px, 100%);
+      margin: 10px auto 0;
+      padding: 0 20px;
       color: var(--muted2);
-      font-size: 13px;
-    }
-
-    .hint code{
-      color: rgba(255,255,255,0.72);
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      font-size: 12px;
-    }
-
-    .msg{
-      display: flex;
-      margin: 10px 0;
-    }
-    .msg.you{ justify-content: flex-start; }
-    .msg.ai{ justify-content: flex-end; }
-
-    .bubble{
-      max-width: min(760px, 86%);
-      padding: 12px 14px;
-      border-radius: 16px;
-      border: 1px solid rgba(255,255,255,0.10);
-      font-size: 17px;
-      line-height: 1.6;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-    }
-
-    .you .bubble{
-      background: var(--youBg);
-      color: var(--youText);
-      border-color: rgba(255,255,255,0.16);
-    }
-
-    .ai .bubble{
-      background: var(--aiBg);
-      color: var(--aiText);
-      border-color: rgba(255,255,255,0.12);
-    }
-
-    .typing{
-      opacity: 0.8;
-      font-style: italic;
-    }
-
-    @media (max-width: 620px){
-      .wrap{ width: calc(100% - 28px); padding: 34px 0 44px; }
-      textarea{ font-size: 16px; }
-      .bubble{ font-size: 16px; }
-      .chat{ height: min(62vh, 560px); }
+      font-size: 14px;
+      text-align: center;
+      line-height: 1.45;
     }
   </style>
 </head>
 
-<body class="bgGlow">
-  <div class="wrap">
-    <div class="top">
-      <div class="markRow">
+<body>
+  <div class="page">
+    <header class="top">
+      <div class="chip">
         <span class="mark" aria-hidden="true">
           <svg viewBox="0 0 24 24">
-            <path d="M12 21s-7-4.6-7-11a4 4 0 0 1 7-2 4 4 0 0 1 7 2c0 6.4-7 11-7 11z"></path>
+            <path d="M12 2v6"></path>
+            <path d="M12 16v6"></path>
+            <path d="M2 12h6"></path>
+            <path d="M16 12h6"></path>
+            <circle cx="12" cy="12" r="2.3"></circle>
           </svg>
         </span>
-        <span class="chip">Resource Navigator</span>
+        SinePatre
       </div>
 
-      <h1>Find support that actually fits</h1>
+      <h1>Resource Navigator</h1>
 
       <p class="desc">
-        A private conversation for fatherless teens who want clarity, not noise.
-        Tell me what is happening and what you want next, and I will help you sort it into a few realistic options.
-        If you are in immediate danger, or thinking about harming yourself, call or text <strong>988</strong> right now.
+        A private guide built on a curated database of vetted support options for fatherless teens.
+        Share what is happening, what you want next, and what feels realistic right now.
+        You will receive high-fit recommendations with clear reasoning and practical next steps.
+        If you are in immediate danger or thinking about harming yourself, call or text <strong>988</strong>.
       </p>
-    </div>
+    </header>
 
-    <div class="shell" role="application" aria-label="SinePatre chat">
-      <div id="chat" class="chat" aria-live="polite"></div>
-      <div class="divider"></div>
+    <main id="messages" class="messages" aria-live="polite" aria-label="Chat messages"></main>
 
-      <div class="row">
-        <div class="inputWrap">
-          <textarea id="input" placeholder="Write a message…" rows="1"></textarea>
-        </div>
+    <div class="composerWrap">
+      <div class="composer">
+        <div class="bar" role="group" aria-label="Message composer">
+          <textarea id="input" placeholder="What do you want help with?" rows="1"></textarea>
 
-        <div class="miniActions">
-          <button id="newChat" class="circleBtn" type="button" aria-label="Create new chat">
-            <span class="tooltip">Create new chat</span>
+          <button id="newChat" class="btn" type="button" data-tip="Start new chat" aria-label="Start new chat">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 5v14"></path>
               <path d="M5 12h14"></path>
             </svg>
           </button>
 
-          <button id="send" class="circleBtn" type="button" aria-label="Send message">
-            <span class="tooltip">Send</span>
+          <button id="send" class="btn primary" type="button" data-tip="Send" aria-label="Send">
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M5 12h12"></path>
-              <path d="M13 6l6 6-6 6"></path>
+              <path d="M5 12h13"></path>
+              <path d="M13 5l7 7-7 7"></path>
             </svg>
           </button>
         </div>
-      </div>
 
-      <div class="hint">
-        Press <code>Enter</code> to send, <code>Shift + Enter</code> for a new line.
+        <div class="tip">
+          Tip: Include one concrete detail, for example “someone to talk to,” “grief,” “anger,” “school stress,” or “mentorship.”
+        </div>
       </div>
     </div>
   </div>
 
   <script>
-    const chatEl = document.getElementById("chat");
+    const messagesEl = document.getElementById("messages");
     const inputEl = document.getElementById("input");
     const sendBtn = document.getElementById("send");
-    const newBtn = document.getElementById("newChat");
+    const newChatBtn = document.getElementById("newChat");
 
     let history = [];
 
-    function addMessage(role, text, opts = {}) {
-      const wrap = document.createElement("div");
-      wrap.className = "msg " + (role === "user" ? "you" : "ai");
+    function autoGrow(el){
+      el.style.height = "auto";
+      el.style.height = Math.min(el.scrollHeight, 160) + "px";
+    }
+
+    function setBusy(b){
+      sendBtn.disabled = b;
+      newChatBtn.disabled = b;
+    }
+
+    function clearChat(){
+      messagesEl.innerHTML = "";
+      history = [];
+      inputEl.value = "";
+      autoGrow(inputEl);
+      inputEl.focus();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function addUser(text){
+      const row = document.createElement("div");
+      row.className = "msgRow user";
 
       const bubble = document.createElement("div");
-      bubble.className = "bubble" + (opts.typing ? " typing" : "");
+      bubble.className = "userBubble";
       bubble.textContent = text;
 
-      wrap.appendChild(bubble);
-      chatEl.appendChild(wrap);
-      chatEl.scrollTop = chatEl.scrollHeight;
-
-      return bubble;
+      row.appendChild(bubble);
+      messagesEl.appendChild(row);
     }
 
-    function setSending(isSending) {
-      sendBtn.disabled = isSending;
-      newBtn.disabled = isSending;
+    function addAssistant(text, { isTyping = false } = {}){
+      const row = document.createElement("div");
+      row.className = "msgRow assistant";
+
+      const block = document.createElement("div");
+      block.className = "assistantBlock";
+
+      const meta = document.createElement("div");
+      meta.className = "assistantMeta";
+      meta.textContent = "Navigator";
+
+      const content = document.createElement("div");
+      content.textContent = text;
+
+      block.appendChild(meta);
+      block.appendChild(content);
+
+      row.appendChild(block);
+      messagesEl.appendChild(row);
+      return row;
     }
 
-    function autosize() {
-      inputEl.style.height = "0px";
-      const h = Math.min(inputEl.scrollHeight, 140);
-      inputEl.style.height = h + "px";
+    function formatReply(data){
+      const intro = data?.intro ? String(data.intro).trim() : "";
+      const resources = Array.isArray(data?.resources) ? data.resources : [];
+
+      const lines = [];
+      if (intro) lines.push(intro);
+
+      if (resources.length){
+        lines.push("");
+        resources.forEach((r, i) => {
+          const title = (r.title || "Resource").trim();
+          const url = (r.url || "").trim();
+          const why = (r.why || "").trim();
+
+          lines.push(`${i + 1}. ${title}${url ? " - " + url : ""}`);
+          if (why) lines.push(why);
+          lines.push("");
+        });
+      }
+
+      return lines.join("\n").trim();
     }
 
-    function trimHistory() {
-      history = history
-        .filter(m => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
-        .slice(-10);
-    }
-
-    async function send() {
+    async function send(){
       const message = (inputEl.value || "").trim();
       if (!message) return;
 
-      addMessage("user", message);
+      addUser(message);
       history.push({ role: "user", content: message });
-      trimHistory();
 
       inputEl.value = "";
-      autosize();
-      setSending(true);
+      autoGrow(inputEl);
+      setBusy(true);
 
-      const typingBubble = addMessage("assistant", "…", { typing: true });
+      const typingRow = addAssistant("Thinking...", { isTyping: true });
 
-      const controller = new AbortController();
-      const timeoutMs = 12000; // fail fast
-      const t = setTimeout(() => controller.abort(), timeoutMs);
-
-      try {
+      try{
         const res = await fetch("/api/navigate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message, history }),
-          signal: controller.signal,
+          body: JSON.stringify({ message, history })
         });
 
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data?.error || data?.detail || "Request failed");
+        if (!res.ok){
+          throw new Error(data?.error || data?.detail || "Request failed");
+        }
 
-        const reply = (data.reply || "").trim() ||
-          "Tell me a little more about what you want most right now, and what would feel doable this week.";
+        typingRow.remove();
 
-        typingBubble.classList.remove("typing");
-        typingBubble.textContent = reply;
-
+        const reply = formatReply(data) || "I did not receive a usable reply. Please try again.";
+        addAssistant(reply);
         history.push({ role: "assistant", content: reply });
-        trimHistory();
-      } catch (err) {
-        typingBubble.classList.remove("typing");
-        typingBubble.textContent =
-          "That request took too long. Try again. If it keeps happening, check your Vercel logs for /api/navigate and confirm your API key is set.";
+
+        window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+      } catch (e){
+        typingRow.remove();
+        const msg = "I could not load recommendations right now. Please try again in a moment.";
+        addAssistant(msg);
+        history.push({ role: "assistant", content: msg });
       } finally {
-        clearTimeout(t);
-        setSending(false);
-        chatEl.scrollTop = chatEl.scrollHeight;
+        setBusy(false);
+        inputEl.focus();
       }
     }
 
-    function newChat() {
-      history = [];
-      chatEl.innerHTML = "";
-      inputEl.value = "";
-      autosize();
-      inputEl.focus();
-    }
-
     sendBtn.addEventListener("click", send);
-    newBtn.addEventListener("click", newChat);
+    newChatBtn.addEventListener("click", clearChat);
+    inputEl.addEventListener("input", () => autoGrow(inputEl));
 
-    inputEl.addEventListener("input", autosize);
     inputEl.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
+      if (e.key === "Enter" && !e.shiftKey){
         e.preventDefault();
         send();
       }
     });
 
-    // No starter message, start clean
-    newChat();
+    inputEl.focus();
   </script>
 </body>
 </html>
