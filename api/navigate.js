@@ -1,10 +1,18 @@
 // api/navigate.js
-// SinePatre Resource Navigator
-// Model: gpt-5-mini
+// SinePatre Resource Navigator API (Vercel serverless)
+//
+// Env vars required:
+// - OPENAI_API_KEY
+// - GOOGLE_SHEET_CSV_URL  (published CSV export link)
+//
+// This endpoint expects POST JSON:
+// { "message": "..." }
+//
+// Returns:
+// { mode, intro, resources: [{title,url,why}] }
 
 const MAX_MESSAGE_LENGTH = 800;
 
-// Basic safety triggers (routes to crisis resources)
 const SAFETY_REGEX = [
   /\b(suicide|kill myself|end my life)\b/i,
   /\b(self[- ]?harm|cut myself|cutting)\b/i,
@@ -12,8 +20,9 @@ const SAFETY_REGEX = [
   /\b(abuse|sexual assault|rape|molested)\b/i,
 ];
 
+// Keep permissive for now so the Squarespace iframe works while testing.
+// After the embed works, we will tighten this to only sinepatre.com.
 function setCors(req, res) {
-  // Keep * for testing. Tighten later to sinepatre.com only.
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -23,6 +32,10 @@ function setCors(req, res) {
 function send(req, res, status, payload) {
   setCors(req, res);
   res.status(status).json(payload);
+}
+
+function triggeredSafety(message) {
+  return SAFETY_REGEX.some((rx) => rx.test(message));
 }
 
 function normalize(text) {
@@ -35,18 +48,45 @@ function normalize(text) {
 
 function tokenize(text) {
   const stop = new Set([
-    "the","and","or","but","if","to","of","in","on","for","with","is","are",
-    "was","were","be","been","being","i","me","my","you","your","we","they",
-    "this","that","it","im","i'm","dont","don't","cant","can't"
+    "the",
+    "and",
+    "or",
+    "but",
+    "if",
+    "to",
+    "of",
+    "in",
+    "on",
+    "for",
+    "with",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "i",
+    "me",
+    "my",
+    "you",
+    "your",
+    "we",
+    "they",
+    "this",
+    "that",
+    "it",
+    "im",
+    "i'm",
+    "dont",
+    "don't",
+    "cant",
+    "can't",
   ]);
 
   return normalize(text)
     .split(" ")
-    .filter(w => w.length > 2 && !stop.has(w));
-}
-
-function triggeredSafety(message) {
-  return SAFETY_REGEX.some(rx => rx.test(message));
+    .filter((w) => w.length > 2 && !stop.has(w));
 }
 
 // Minimal CSV parser (handles quotes)
@@ -77,7 +117,7 @@ function parseCSV(csv) {
     if ((c === "\n" || c === "\r") && !inQuotes) {
       if (c === "\r" && n === "\n") i++;
       row.push(field);
-      if (row.some(v => v !== "")) rows.push(row);
+      if (row.some((v) => v !== "")) rows.push(row);
       row = [];
       field = "";
       continue;
@@ -86,7 +126,7 @@ function parseCSV(csv) {
   }
 
   row.push(field);
-  if (row.some(v => v !== "")) rows.push(row);
+  if (row.some((v) => v !== "")) rows.push(row);
   return rows;
 }
 
@@ -98,33 +138,71 @@ async function loadResources(csvUrl) {
   const rows = parseCSV(text);
   if (!rows.length) throw new Error("Empty CSV");
 
-  const headers = rows[0].map(h => normalize(h).replace(/\s+/g, "_"));
-  const col = name => headers.indexOf(name);
+  const headers = rows[0].map((h) => normalize(h).replace(/\s+/g, "_"));
+  const col = (name) => headers.indexOf(name);
 
   const required = [
-    "id","title","description","best_for",
-    "when_to_use","not_for","fatherlessness_connection","url"
+    "id",
+    "title",
+    "description",
+    "best_for",
+    "when_to_use",
+    "not_for",
+    "fatherlessness_connection",
+    "url",
   ];
 
-  required.forEach(c => {
+  for (const c of required) {
     if (col(c) === -1) throw new Error(`Missing column: ${c}`);
-  });
+  }
 
   return rows
     .slice(1)
-    .map(r => ({
-      id: (r[col("id")] || "").trim(),
-      title: (r[col("title")] || "").trim(),
-      description: (r[col("description")] || "").trim(),
-      best_for: (r[col("best_for")] || "").trim(),
-      when_to_use: (r[col("when_to_use")] || "").trim(),
-      not_for: (r[col("not_for")] || "").trim(),
-      fatherlessness_connection: (r[col("fatherlessness_connection")] || "").trim(),
-      url: (r[col("url")] || "").trim(),
+    .map((r2) => ({
+      id: (r2[col("id")] || "").trim(),
+      title: (r2[col("title")] || "").trim(),
+      description: (r2[col("description")] || "").trim(),
+      best_for: (r2[col("best_for")] || "").trim(),
+      when_to_use: (r2[col("when_to_use")] || "").trim(),
+      not_for: (r2[col("not_for")] || "").trim(),
+      fatherlessness_connection: (r2[col("fatherlessness_connection")] || "").trim(),
+      url: (r2[col("url")] || "").trim(),
     }))
-    .filter(x => x.id && x.title);
+    .filter((x) => x.id && x.title && x.url);
 }
 
+function isCrisisResource(resource) {
+  const t = `${resource.title} ${resource.description} ${resource.when_to_use}`.toLowerCase();
+  return (
+    t.includes("crisis") ||
+    t.includes("suicide") ||
+    t.includes("self-harm") ||
+    t.includes("hotline") ||
+    t.includes("988")
+  );
+}
+
+function scoreResource(resource, queryTokens, tagTokens) {
+  const haystack = tokenize(
+    `${resource.title} ${resource.description} ${resource.best_for} ${resource.fatherlessness_connection} ${resource.when_to_use} ${resource.not_for}`
+  );
+
+  let score = 0;
+  for (const w of haystack) {
+    if (queryTokens.includes(w)) score += 3;
+    if (tagTokens.includes(w)) score += 5;
+  }
+
+  // Small boost for explicit fatherlessness relevance
+  const fatherText = (resource.fatherlessness_connection || "").toLowerCase();
+  if (fatherText.includes("father") || fatherText.includes("dad") || fatherText.includes("fatherless")) {
+    score += 4;
+  }
+
+  return score;
+}
+
+// OpenAI call: returns JSON object
 async function openaiJSON(apiKey, messages) {
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -134,7 +212,7 @@ async function openaiJSON(apiKey, messages) {
     },
     body: JSON.stringify({
       model: "gpt-5-mini",
-      // IMPORTANT: gpt-5-mini does not support custom temperature values here, so omit it.
+      // IMPORTANT: do not set temperature for this model (avoid unsupported value errors)
       response_format: { type: "json_object" },
       messages,
     }),
@@ -147,19 +225,6 @@ async function openaiJSON(apiKey, messages) {
 
   const j = await r.json();
   return JSON.parse(j.choices[0].message.content);
-}
-
-function scoreResource(resource, queryTokens, tagTokens) {
-  const haystack = tokenize(
-    `${resource.title} ${resource.description} ${resource.best_for} ${resource.fatherlessness_connection}`
-  );
-
-  let score = 0;
-  for (const w of haystack) {
-    if (queryTokens.includes(w)) score += 3;
-    if (tagTokens.includes(w)) score += 5;
-  }
-  return score;
 }
 
 export default async function handler(req, res) {
@@ -184,26 +249,27 @@ export default async function handler(req, res) {
 
   const message = String(req.body?.message || "").trim();
   if (!message) return send(req, res, 400, { error: "Missing message" });
-  if (message.length > MAX_MESSAGE_LENGTH) {
-    return send(req, res, 400, { error: "Message too long" });
-  }
+  if (message.length > MAX_MESSAGE_LENGTH) return send(req, res, 400, { error: "Message too long" });
 
+  // Hard safety gate: skip AI, return crisis resources only
   if (triggeredSafety(message)) {
     return send(req, res, 200, {
       mode: "safety",
       intro: "You deserve immediate support. Please use one of these resources now.",
       resources: [
-        { title: "988 Suicide & Crisis Lifeline", url: "https://988lifeline.org" },
-        { title: "Crisis Text Line", url: "https://www.crisistextline.org" },
-        { title: "Teen Line", url: "https://teenline.org" },
-        { title: "Childhelp Hotline", url: "https://www.childhelp.org/hotline/" },
+        { title: "988 Suicide & Crisis Lifeline", url: "https://988lifeline.org", why: "24/7 call or text support in the U.S." },
+        { title: "Crisis Text Line", url: "https://www.crisistextline.org", why: "Text-based support with trained counselors." },
+        { title: "Teen Line", url: "https://teenline.org", why: "Teens helping teens via text, call, or email." },
+        { title: "Childhelp Hotline", url: "https://www.childhelp.org/hotline/", why: "Support for abuse or unsafe situations." },
       ],
     });
   }
 
   try {
+    // 1) Load resources from your sheet
     const resources = await loadResources(csvUrl);
 
+    // 2) Classify the need into tags + urgency
     const classification = await openaiJSON(apiKey, [
       {
         role: "system",
@@ -213,32 +279,50 @@ export default async function handler(req, res) {
       { role: "user", content: message },
     ]);
 
+    const urgency = String(classification.urgency || "low").toLowerCase();
     const queryTokens = tokenize(message);
     const tagTokens = tokenize((classification.need_tags || []).join(" "));
 
-    const ranked = resources
-      .map(r => ({ r, s: scoreResource(r, queryTokens, tagTokens) }))
-      .filter(x => x.s > 0)
-      .sort((a, b) => b.s - a.s)
-      .slice(0, 6)
-      .map(x => x.r);
+    // 3) Rank resources by match score
+    const rankedAll = resources
+      .map((r) => ({ r, s: scoreResource(r, queryTokens, tagTokens) }))
+      .filter((x) => x.s > 0)
+      .sort((a, b) => b.s - a.s);
 
-    if (!ranked.length) {
+    // 4) Crisis filtering:
+    // If not "high" urgency, remove crisis/hotline resources from recommendations
+    let ranked = rankedAll;
+    if (urgency !== "high") {
+      ranked = rankedAll.filter((x) => !isCrisisResource(x.r));
+      if (!ranked.length) ranked = rankedAll; // fallback if you only had crisis items
+    }
+
+    const top = ranked.slice(0, 6).map((x) => x.r);
+
+    if (!top.length) {
       return send(req, res, 200, {
         mode: "no_match",
-        intro:
-          "I could not find a strong match yet. Try describing what you are feeling or what kind of help you want.",
+        intro: "I could not find a strong match yet. Try describing what you want help with in more detail.",
         resources: [],
       });
     }
 
+    // 5) Ask AI to write the final response using ONLY these resources
     const response = await openaiJSON(apiKey, [
       {
         role: "system",
         content:
-          "You recommend resources. Use only the provided list. No advice. Return JSON: { intro: string, resources: [{title, url, why}] }.",
+          "You recommend resources for a fatherless teen. Use ONLY the provided resources. Do not give personal advice. Return JSON: { intro: string, resources: [{title, url, why}] }.",
       },
-      { role: "user", content: JSON.stringify({ message, resources: ranked }) },
+      {
+        role: "user",
+        content: JSON.stringify({
+          message,
+          urgency,
+          need_tags: classification.need_tags || [],
+          resources: top,
+        }),
+      },
     ]);
 
     return send(req, res, 200, {
@@ -252,8 +336,7 @@ export default async function handler(req, res) {
     if (msg.includes("insufficient_quota")) {
       return send(req, res, 402, {
         error: "OpenAI billing not active",
-        detail:
-          "Your API key has no available quota. Confirm billing is enabled and you have remaining credits.",
+        detail: "Your API key has no available quota. Confirm billing is enabled and you have remaining credits.",
       });
     }
 
