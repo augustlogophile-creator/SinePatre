@@ -1,9 +1,10 @@
 // api/navigate.js
 // SinePatre Resource Navigator
-// Model: gpt-5.0-mini
+// Model: gpt-5-mini
 
 const MAX_MESSAGE_LENGTH = 800;
 
+// Basic safety triggers (routes to crisis resources)
 const SAFETY_REGEX = [
   /\b(suicide|kill myself|end my life)\b/i,
   /\b(self[- ]?harm|cut myself|cutting)\b/i,
@@ -11,7 +12,17 @@ const SAFETY_REGEX = [
   /\b(abuse|sexual assault|rape|molested)\b/i,
 ];
 
+function setCors(res) {
+  // You can tighten this later to your Squarespace domain.
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  // Optional: cache preflight
+  res.setHeader("Access-Control-Max-Age", "86400");
+}
+
 function send(res, status, payload) {
+  setCors(res);
   res.status(status).json(payload);
 }
 
@@ -39,6 +50,7 @@ function triggeredSafety(message) {
   return SAFETY_REGEX.some(rx => rx.test(message));
 }
 
+// Minimal CSV parser (handles quotes)
 function parseCSV(csv) {
   const rows = [];
   let row = [];
@@ -54,18 +66,15 @@ function parseCSV(csv) {
       i++;
       continue;
     }
-
     if (c === '"') {
       inQuotes = !inQuotes;
       continue;
     }
-
     if (c === "," && !inQuotes) {
       row.push(field);
       field = "";
       continue;
     }
-
     if ((c === "\n" || c === "\r") && !inQuotes) {
       if (c === "\r" && n === "\n") i++;
       row.push(field);
@@ -74,24 +83,23 @@ function parseCSV(csv) {
       field = "";
       continue;
     }
-
     field += c;
   }
 
   row.push(field);
   if (row.some(v => v !== "")) rows.push(row);
-
   return rows;
 }
 
 async function loadResources(csvUrl) {
   const r = await fetch(csvUrl);
   if (!r.ok) throw new Error("Failed to fetch sheet CSV");
-
   const text = await r.text();
-  const rows = parseCSV(text);
-  const headers = rows[0].map(h => normalize(h).replace(/\s+/g, "_"));
 
+  const rows = parseCSV(text);
+  if (!rows.length) throw new Error("Empty CSV");
+
+  const headers = rows[0].map(h => normalize(h).replace(/\s+/g, "_"));
   const col = name => headers.indexOf(name);
 
   const required = [
@@ -103,16 +111,19 @@ async function loadResources(csvUrl) {
     if (col(c) === -1) throw new Error(`Missing column: ${c}`);
   });
 
-  return rows.slice(1).map(r => ({
-    id: r[col("id")]?.trim(),
-    title: r[col("title")]?.trim(),
-    description: r[col("description")]?.trim(),
-    best_for: r[col("best_for")]?.trim(),
-    when_to_use: r[col("when_to_use")]?.trim(),
-    not_for: r[col("not_for")]?.trim(),
-    fatherlessness_connection: r[col("fatherlessness_connection")]?.trim(),
-    url: r[col("url")]?.trim(),
-  })).filter(x => x.id && x.title);
+  return rows
+    .slice(1)
+    .map(r => ({
+      id: (r[col("id")] || "").trim(),
+      title: (r[col("title")] || "").trim(),
+      description: (r[col("description")] || "").trim(),
+      best_for: (r[col("best_for")] || "").trim(),
+      when_to_use: (r[col("when_to_use")] || "").trim(),
+      not_for: (r[col("not_for")] || "").trim(),
+      fatherlessness_connection: (r[col("fatherlessness_connection")] || "").trim(),
+      url: (r[col("url")] || "").trim(),
+    }))
+    .filter(x => x.id && x.title);
 }
 
 async function openaiJSON(apiKey, messages) {
@@ -123,7 +134,7 @@ async function openaiJSON(apiKey, messages) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "gpt-5.0-mini",
+      model: "gpt-5-mini",
       temperature: 0.2,
       response_format: { type: "json_object" },
       messages
@@ -145,15 +156,22 @@ function scoreResource(resource, queryTokens, tagTokens) {
   );
 
   let score = 0;
-  haystack.forEach(w => {
+  for (const w of haystack) {
     if (queryTokens.includes(w)) score += 3;
     if (tagTokens.includes(w)) score += 5;
-  });
-
+  }
   return score;
 }
 
 export default async function handler(req, res) {
+  setCors(res);
+
+  // CORS preflight
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+
   if (req.method !== "POST") {
     return send(res, 405, { error: "POST only" });
   }
@@ -184,50 +202,58 @@ export default async function handler(req, res) {
     });
   }
 
-  const resources = await loadResources(csvUrl);
+  try {
+    const resources = await loadResources(csvUrl);
 
-  const classification = await openaiJSON(apiKey, [
-    {
-      role: "system",
-      content:
-        "You classify a fatherless teen's need. Output JSON with need_tags (3-6 short phrases), urgency (low|medium|high). Do not give advice."
-    },
-    { role: "user", content: message }
-  ]);
+    const classification = await openaiJSON(apiKey, [
+      {
+        role: "system",
+        content:
+          "You classify a fatherless teen's need. Output JSON with need_tags (3-6 short phrases), urgency (low|medium|high). Do not give advice."
+      },
+      { role: "user", content: message }
+    ]);
 
-  const queryTokens = tokenize(message);
-  const tagTokens = tokenize((classification.need_tags || []).join(" "));
+    const queryTokens = tokenize(message);
+    const tagTokens = tokenize((classification.need_tags || []).join(" "));
 
-  const ranked = resources
-    .map(r => ({ r, s: scoreResource(r, queryTokens, tagTokens) }))
-    .filter(x => x.s > 0)
-    .sort((a, b) => b.s - a.s)
-    .slice(0, 6)
-    .map(x => x.r);
+    const ranked = resources
+      .map(r => ({ r, s: scoreResource(r, queryTokens, tagTokens) }))
+      .filter(x => x.s > 0)
+      .sort((a, b) => b.s - a.s)
+      .slice(0, 6)
+      .map(x => x.r);
 
-  if (!ranked.length) {
+    if (!ranked.length) {
+      return send(res, 200, {
+        mode: "no_match",
+        intro:
+          "I could not find a strong match yet. Try describing what you are feeling or what kind of help you want.",
+        resources: []
+      });
+    }
+
+    const response = await openaiJSON(apiKey, [
+      {
+        role: "system",
+        content:
+          "You recommend resources. Use only the provided list. No advice. Return JSON: { intro: string, resources: [{title, url, why}] }."
+      },
+      {
+        role: "user",
+        content: JSON.stringify({ message, resources: ranked })
+      }
+    ]);
+
     return send(res, 200, {
-      mode: "no_match",
-      intro: "I could not find a strong match yet. Try describing what you are feeling or what kind of help you want.",
-      resources: []
+      mode: "recommendations",
+      intro: response.intro || "Here are resources that best match what you shared.",
+      resources: Array.isArray(response.resources) ? response.resources : []
+    });
+  } catch (err) {
+    return send(res, 500, {
+      error: "Server error",
+      detail: String(err?.message || err)
     });
   }
-
-  const response = await openaiJSON(apiKey, [
-    {
-      role: "system",
-      content:
-        "You recommend resources. Use only the provided list. No advice. For each, explain why it fits in one sentence."
-    },
-    {
-      role: "user",
-      content: JSON.stringify({ message, resources: ranked })
-    }
-  ]);
-
-  send(res, 200, {
-    mode: "recommendations",
-    intro: response.intro || "Here are resources that best match what you shared.",
-    resources: response.resources || []
-  });
 }
