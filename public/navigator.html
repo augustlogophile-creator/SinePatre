@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SinePatre Resource Navigator</title>
+
+    <style>
+      body {
+        margin: 0;
+        background: #0b0c10;
+        color: #e9eef7;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      }
+
+      .wrap {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 28px 18px;
+      }
+
+      .card {
+        background: #121420;
+        border: 1px solid #23263a;
+        border-radius: 16px;
+        padding: 20px;
+      }
+
+      h1 {
+        font-size: 22px;
+        margin: 0 0 8px;
+      }
+
+      p {
+        margin: 0 0 14px;
+        color: #b9c2d6;
+        line-height: 1.45;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 120px;
+        border-radius: 14px;
+        border: 1px solid #2a2f49;
+        background: #0f1220;
+        color: #e9eef7;
+        padding: 14px;
+        font-size: 15px;
+        outline: none;
+        resize: vertical;
+      }
+
+      button {
+        margin-top: 14px;
+        background: #4f7cff;
+        color: #ffffff;
+        border: none;
+        border-radius: 14px;
+        padding: 12px 16px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .note {
+        margin-top: 10px;
+        font-size: 12px;
+        color: #9aa6c3;
+      }
+
+      .out {
+        margin-top: 18px;
+      }
+
+      .intro {
+        background: #0f1220;
+        border: 1px solid #23263a;
+        border-radius: 14px;
+        padding: 14px;
+        margin-bottom: 12px;
+        line-height: 1.45;
+      }
+
+      .resource {
+        background: #0f1220;
+        border: 1px solid #23263a;
+        border-radius: 14px;
+        padding: 14px;
+        margin-top: 10px;
+      }
+
+      .resource a {
+        color: #8fb1ff;
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      .why {
+        margin-top: 6px;
+        font-size: 14px;
+        color: #c9d3ea;
+        line-height: 1.4;
+      }
+
+      .error {
+        background: #2a1212;
+        border: 1px solid #512020;
+        border-radius: 14px;
+        padding: 14px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>Resource Navigator</h1>
+        <p>
+          Share what you’re dealing with. This tool will suggest a small number of
+          vetted resources that actually match your situation.
+        </p>
+
+        <textarea
+          id="msg"
+          placeholder="Example: I feel angry about my dad and I don’t know what to do with it."
+        ></textarea>
+
+        <button id="btn">Find resources</button>
+
+        <div class="note">
+          If you are in immediate danger or thinking about harming yourself,
+          call or text 988 right now.
+        </div>
+
+        <div id="out" class="out"></div>
+      </div>
+    </div>
+
+    <script>
+      const btn = document.getElementById("btn");
+      const msg = document.getElementById("msg");
+      const out = document.getElementById("out");
+
+      function esc(s) {
+        return String(s).replace(/[&<>"']/g, c => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#039;"
+        }[c]));
+      }
+
+      btn.addEventListener("click", async () => {
+        const text = msg.value.trim();
+        if (!text) return;
+
+        btn.disabled = true;
+        out.innerHTML = "<div class='intro'>Finding the best resources…</div>";
+
+        try {
+          const res = await fetch("/api/navigate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: text })
+          });
+
+          const data = await res.json();
+
+          if (!res.ok) {
+            out.innerHTML =
+              "<div class='error'><b>Error</b><div class='why'>" +
+              esc(data.detail || data.error || "Something went wrong.") +
+              "</div></div>";
+            return;
+          }
+
+          let html = "";
+
+          if (data.intro) {
+            html += "<div class='intro'>" + esc(data.intro) + "</div>";
+          }
+
+          if (Array.isArray(data.resources)) {
+            for (const r of data.resources) {
+              html += `
+                <div class="resource">
+                  <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">
+                    ${esc(r.title)}
+                  </a>
+                  <div class="why">${esc(r.why || "")}</div>
+                </div>
+              `;
+            }
+          }
+
+          out.innerHTML = html || "<div class='intro'>No matches yet.</div>";
+        } catch (e) {
+          out.innerHTML =
+            "<div class='error'><b>Network error</b><div class='why'>" +
+            esc(e.message) +
+            "</div></div>";
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
