@@ -14,22 +14,18 @@
       --text: rgba(255,255,255,0.92);
       --muted: rgba(255,255,255,0.68);
       --muted2: rgba(255,255,255,0.52);
-      --hair: rgba(255,255,255,0.10);
 
       --navy: #1f2f5a;
       --navyHover: #263a70;
 
-      --inputBg: rgba(255,255,255,0.06);
       --inputBorder: rgba(255,255,255,0.10);
-
       --userBubbleBg: rgba(255,255,255,0.12);
       --userBubbleBorder: rgba(255,255,255,0.14);
-
-      --assistantText: rgba(255,255,255,0.92);
     }
 
     *{ box-sizing: border-box; }
     html, body { height: 100%; }
+
     body{
       margin: 0;
       font-family: 'EB Garamond', Georgia, serif;
@@ -99,11 +95,10 @@
 
     .desc strong{ color: rgba(255,255,255,0.90); font-weight: 700; }
 
-    /* Messages area */
     .messages{
       width: min(980px, 100%);
       margin: 0 auto;
-      padding: 26px 20px 140px; /* space for input bar */
+      padding: 26px 20px 160px;
       flex: 1;
     }
 
@@ -111,14 +106,8 @@
       display: flex;
       margin: 18px 0;
     }
-
-    .msgRow.user{
-      justify-content: flex-end;
-    }
-
-    .msgRow.assistant{
-      justify-content: flex-start;
-    }
+    .msgRow.user{ justify-content: flex-end; }
+    .msgRow.assistant{ justify-content: flex-start; }
 
     .userBubble{
       max-width: min(560px, 92%);
@@ -126,7 +115,7 @@
       border: 1px solid var(--userBubbleBorder);
       border-radius: 18px;
       padding: 10px 14px;
-      font-size: 16.5px;
+      font-size: 16px;
       line-height: 1.55;
       color: rgba(255,255,255,0.92);
       white-space: pre-wrap;
@@ -135,67 +124,28 @@
 
     .assistantBlock{
       max-width: min(760px, 96%);
-      font-size: 16.5px;
+      font-size: 16px;
       line-height: 1.62;
-      color: var(--assistantText);
+      color: rgba(255,255,255,0.92);
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
 
     .assistantMeta{
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
       color: var(--muted2);
       font-size: 14px;
       margin-bottom: 8px;
     }
 
-    .assistantActions{
-      display: inline-flex;
-      gap: 10px;
-      margin-top: 10px;
-      opacity: 0.8;
-    }
-
-    .actionBtn{
-      width: 30px;
-      height: 30px;
-      border-radius: 10px;
-      border: 1px solid rgba(255,255,255,0.10);
-      background: rgba(255,255,255,0.04);
-      color: rgba(255,255,255,0.78);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: background 140ms ease, transform 140ms ease, border-color 140ms ease;
-      user-select: none;
-    }
-
-    .actionBtn:hover{
-      background: rgba(255,255,255,0.07);
-      border-color: rgba(255,255,255,0.14);
-      transform: translateY(-1px);
-    }
-
-    .actionBtn svg{
-      width: 16px;
-      height: 16px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    /* Input bar */
     .composerWrap{
-      position: sticky;
+      position: fixed;
+      left: 0;
+      right: 0;
       bottom: 0;
       padding: 18px 0 26px;
-      background: linear-gradient(to top, rgba(15,15,16,0.94), rgba(15,15,16,0.70), transparent);
-      backdrop-filter: blur(8px);
+      background: rgba(15,15,16,0.92);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid rgba(255,255,255,0.06);
     }
 
     .composer{
@@ -329,7 +279,7 @@
       <p class="desc">
         A private guide built on a curated database of vetted support options for fatherless teens.
         Share what is happening, what you want next, and what feels realistic right now.
-        You will receive three high-fit recommendations, each explained clearly so you can decide what to do next.
+        You will receive high-fit recommendations with clear reasoning and practical next steps.
         If you are in immediate danger or thinking about harming yourself, call or text <strong>988</strong>.
       </p>
     </header>
@@ -339,11 +289,7 @@
     <div class="composerWrap">
       <div class="composer">
         <div class="bar" role="group" aria-label="Message composer">
-          <textarea
-            id="input"
-            placeholder="What do you want help with?"
-            rows="1"
-          ></textarea>
+          <textarea id="input" placeholder="What do you want help with?" rows="1"></textarea>
 
           <button id="newChat" class="btn" type="button" data-tip="Start new chat" aria-label="Start new chat">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -373,6 +319,8 @@
     const sendBtn = document.getElementById("send");
     const newChatBtn = document.getElementById("newChat");
 
+    let history = [];
+
     function autoGrow(el){
       el.style.height = "auto";
       el.style.height = Math.min(el.scrollHeight, 160) + "px";
@@ -383,15 +331,13 @@
       newChatBtn.disabled = b;
     }
 
-    function scrollBottom(){
-      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-    }
-
     function clearChat(){
       messagesEl.innerHTML = "";
+      history = [];
       inputEl.value = "";
       autoGrow(inputEl);
       inputEl.focus();
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
     function addUser(text){
@@ -423,30 +369,14 @@
       block.appendChild(meta);
       block.appendChild(content);
 
-      if (!isTyping){
-        const actions = document.createElement("div");
-        actions.className = "assistantActions";
-
-        const copyBtn = document.createElement("button");
-        copyBtn.className = "actionBtn";
-        copyBtn.type = "button";
-        copyBtn.title = "Copy";
-        copyBtn.innerHTML = `
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M9 9h10v10H9z"></path>
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-          </svg>`;
-        copyBtn.addEventListener("click", async () => {
-          try { await navigator.clipboard.writeText(text); } catch {}
-        });
-
-        actions.appendChild(copyBtn);
-        block.appendChild(actions);
-      }
-
       row.appendChild(block);
       messagesEl.appendChild(row);
       return row;
+    }
+
+    function linkify(text){
+      const urlRx = /(https?:\/\/[^\s]+)/g;
+      return String(text).replace(urlRx, (m) => m);
     }
 
     function formatReply(data){
@@ -458,18 +388,18 @@
 
       if (resources.length){
         lines.push("");
-        resources.slice(0, 3).forEach((r, i) => {
+        resources.forEach((r, i) => {
           const title = (r.title || "Resource").trim();
           const url = (r.url || "").trim();
           const why = (r.why || "").trim();
 
-          lines.push(`${i + 1}. ${title}${url ? " — " + url : ""}`);
+          lines.push(`${i + 1}. ${title}${url ? " - " + url : ""}`);
           if (why) lines.push(why);
           lines.push("");
         });
       }
 
-      return lines.join("\n").trim();
+      return linkify(lines.join("\n").trim());
     }
 
     async function send(){
@@ -477,19 +407,19 @@
       if (!message) return;
 
       addUser(message);
+      history.push({ role: "user", content: message });
+
       inputEl.value = "";
       autoGrow(inputEl);
       setBusy(true);
-      scrollBottom();
 
       const typingRow = addAssistant("Thinking...", { isTyping: true });
-      scrollBottom();
 
       try{
         const res = await fetch("/api/navigate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message })
+          body: JSON.stringify({ message, history })
         });
 
         const data = await res.json().catch(() => ({}));
@@ -501,12 +431,14 @@
 
         const reply = formatReply(data) || "I did not receive a usable reply. Please try again.";
         addAssistant(reply);
-        scrollBottom();
+        history.push({ role: "assistant", content: reply });
 
+        window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
       } catch (e){
         typingRow.remove();
-        addAssistant("I could not load recommendations right now. Please try again in a moment.");
-        scrollBottom();
+        const msg = "I could not load recommendations right now. Please try again in a moment.";
+        addAssistant(msg);
+        history.push({ role: "assistant", content: msg });
       } finally {
         setBusy(false);
         inputEl.focus();
