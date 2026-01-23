@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>SinePatre Navigator</title>
+  <title>SinePatre Resource Navigator</title>
 
   <style>
     @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&display=swap');
@@ -13,15 +13,19 @@
       --bg: #0f0f10;
       --panel: rgba(255,255,255,0.045);
       --border: rgba(255,255,255,0.10);
-      --soft: rgba(255,255,255,0.06);
       --text: rgba(255,255,255,0.92);
-      --muted: rgba(255,255,255,0.68);
-      --muted2: rgba(255,255,255,0.52);
-      --accent: #d07b57;
+      --muted: rgba(255,255,255,0.70);
+      --muted2: rgba(255,255,255,0.55);
+
+      --navy: #1f2f5a;
+      --navyHover: #24386c;
+
       --userBubble: #f2f2f2;
       --userText: #101010;
+
       --aiBubble: #1b1b1d;
       --aiText: rgba(255,255,255,0.92);
+
       --shadow: 0 18px 70px rgba(0,0,0,0.55);
     }
 
@@ -44,16 +48,14 @@
       padding: 42px 18px;
     }
 
-    .wrap{
-      width: min(900px, 100%);
-    }
+    .wrap{ width: min(900px, 100%); }
 
     .brand{
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 12px;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       color: var(--text);
     }
 
@@ -66,6 +68,11 @@
       width: 18px;
       height: 18px;
       display: block;
+      stroke: var(--navy);
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
 
     h1{
@@ -79,12 +86,14 @@
 
     .sub{
       margin: 10px auto 0;
-      max-width: 760px;
+      max-width: 780px;
       text-align: center;
       color: var(--muted);
       font-size: 18px;
-      line-height: 1.55;
+      line-height: 1.60;
     }
+
+    .sub strong{ color: rgba(255,255,255,0.90); font-weight: 700; }
 
     .panel{
       margin: 22px auto 0;
@@ -111,7 +120,7 @@
     .bubbleRow.ai{ justify-content: flex-end; }
 
     .bubble{
-      max-width: min(620px, 92%);
+      max-width: min(640px, 92%);
       padding: 12px 14px;
       border-radius: 16px;
       font-size: 18px;
@@ -174,6 +183,7 @@
       cursor: pointer;
       transition: transform 150ms ease, background 150ms ease, border-color 150ms ease, opacity 150ms ease;
       user-select: none;
+      position: relative;
     }
 
     .btn:hover{
@@ -183,13 +193,13 @@
     }
 
     .btn.primary{
-      background: color-mix(in srgb, var(--accent) 75%, rgba(255,255,255,0.06));
+      background: var(--navy);
       border-color: rgba(255,255,255,0.10);
-      color: #1a1a1a;
+      color: rgba(255,255,255,0.96);
     }
 
     .btn.primary:hover{
-      background: color-mix(in srgb, var(--accent) 85%, rgba(255,255,255,0.08));
+      background: var(--navyHover);
     }
 
     .btn:disabled{
@@ -206,6 +216,32 @@
       stroke-width: 2;
       stroke-linecap: round;
       stroke-linejoin: round;
+    }
+
+    /* Clean tooltip for hover labels */
+    .btn[data-tip]::after{
+      content: attr(data-tip);
+      position: absolute;
+      bottom: 56px;
+      right: 0;
+      background: rgba(10,10,11,0.92);
+      color: rgba(255,255,255,0.92);
+      border: 1px solid rgba(255,255,255,0.14);
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.2;
+      white-space: nowrap;
+      opacity: 0;
+      transform: translateY(6px);
+      pointer-events: none;
+      transition: opacity 140ms ease, transform 140ms ease;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+    }
+
+    .btn[data-tip]:hover::after{
+      opacity: 1;
+      transform: translateY(0);
     }
 
     .foot{
@@ -229,9 +265,9 @@
 <body>
   <main class="page">
     <div class="wrap">
-      <div class="brand" aria-label="SinePatre Navigator">
+      <div class="brand" aria-label="SinePatre Resource Navigator">
         <span class="mark" aria-hidden="true">
-          <!-- simple asterisk-flower mark (replaces Claude logo) -->
+          <!-- simple mark (not Claude) -->
           <svg viewBox="0 0 24 24">
             <path d="M12 2v6"></path>
             <path d="M12 16v6"></path>
@@ -241,15 +277,17 @@
             <path d="M15.2 15.2l4.2 4.2"></path>
             <path d="M19.4 4.6l-4.2 4.2"></path>
             <path d="M8.8 15.2l-4.2 4.2"></path>
-            <circle cx="12" cy="12" r="2.3" fill="none"></circle>
+            <circle cx="12" cy="12" r="2.3"></circle>
           </svg>
         </span>
         <div style="color: var(--muted2); font-size: 14px; letter-spacing: 0.06em;">SinePatre</div>
       </div>
 
-      <h1>Navigator</h1>
+      <h1>Resource Navigator</h1>
       <p class="sub">
-        Tell me what is going on and what kind of support you want next.
+        A private guide built on a curated database of vetted support options for fatherless teens.
+        Share what is happening, what you want next, and what feels realistic right now.
+        You will receive a short, high-fit set of recommendations, each explained clearly so you can choose with confidence.
         If you are in immediate danger or thinking about harming yourself, call or text <strong>988</strong>.
       </p>
 
@@ -261,17 +299,17 @@
             id="input"
             class="input"
             rows="1"
-            placeholder="How can I help?"
+            placeholder="What do you want help with?"
           ></textarea>
 
-          <button id="newChat" class="btn" type="button" aria-label="New chat" title="New chat">
+          <button id="newChat" class="btn" type="button" data-tip="Start new chat" aria-label="Start new chat">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 5v14"></path>
               <path d="M5 12h14"></path>
             </svg>
           </button>
 
-          <button id="send" class="btn primary" type="button" aria-label="Send" title="Send">
+          <button id="send" class="btn primary" type="button" data-tip="Send" aria-label="Send">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M5 12h13"></path>
               <path d="M13 5l7 7-7 7"></path>
@@ -281,7 +319,7 @@
       </section>
 
       <div class="foot">
-        Be specific about what you want, someone to talk to, grief support, mentorship, coping skills, or therapy options.
+        Tip: Include one concrete detail, for example “someone to talk to tonight,” “grief,” “anger,” “school stress,” or “mentorship.”
       </div>
     </div>
   </main>
@@ -335,6 +373,7 @@
 
       appendBubble("user", message);
       history.push({ role: "user", content: message });
+
       resetComposer();
       setBusy(true);
 
@@ -345,24 +384,18 @@
 
       const typingBubble = document.createElement("div");
       typingBubble.className = "bubble ai";
-      typingBubble.textContent = "…";
+      typingBubble.textContent = "Thinking";
 
       typingRow.appendChild(typingBubble);
       chatEl.appendChild(typingRow);
       chatEl.scrollTop = chatEl.scrollHeight;
 
       try{
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 25000);
-
         const res = await fetch("/api/navigate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          signal: controller.signal,
           body: JSON.stringify({ message })
         });
-
-        clearTimeout(timeout);
 
         const data = await res.json().catch(() => ({}));
         if (!res.ok){
@@ -383,7 +416,7 @@
 
           if (resources.length){
             lines.push("");
-            resources.slice(0, 6).forEach((r, i) => {
+            resources.slice(0, 3).forEach((r, i) => {
               const title = r.title || "Resource";
               const why = r.why ? String(r.why).trim() : "";
               const url = r.url ? String(r.url).trim() : "";
@@ -393,6 +426,7 @@
               lines.push("");
             });
           }
+
           reply = lines.join("\n").trim();
         }
 
@@ -407,11 +441,7 @@
         const t = document.getElementById(typingId);
         if (t) t.remove();
 
-        const msg =
-          (err && err.name === "AbortError")
-            ? "That took too long. Try again."
-            : "Something went wrong. Check Vercel Runtime Logs for /api/navigate and confirm your environment variables.";
-
+        const msg = "I could not load recommendations right now. Please try again in a moment.";
         appendBubble("assistant", msg);
         history.push({ role: "assistant", content: msg });
 
