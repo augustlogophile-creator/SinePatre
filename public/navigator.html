@@ -1,304 +1,515 @@
-// /api/navigate.js
-// Resource Navigator API (Vercel Serverless Function)
-// - Reads your Google Sheet (CSV) from SHEET_CSV_URL
-// - Picks strong candidate matches with a simple relevance score
-// - Uses OpenAI to choose the BEST 3 and write high-quality guidance
-//
-// Required env vars on Vercel:
-// - OPENAI_API_KEY
-// - SHEET_CSV_URL  (must be a CSV export URL, not the normal "edit" link)
-// Optional:
-// - OPENAI_MODEL (default: gpt-5-mini)
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SinePatre Resource Navigator</title>
 
-const DEFAULT_MODEL = "gpt-5-mini";
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&display=swap');
 
-function json(res, status, body) {
-  res.statusCode = status;
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
-  res.end(JSON.stringify(body));
-}
-
-function normalize(s) {
-  return String(s || "")
-    .toLowerCase()
-    .replace(/[\u2019’]/g, "'")
-    .replace(/[^a-z0-9\s-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function tokenize(s) {
-  const stop = new Set([
-    "the","a","an","and","or","but","to","of","in","on","for","with","is","are","was","were","be","been","being",
-    "i","me","my","mine","you","your","yours","we","our","ours","they","their","theirs","it","its","this","that",
-    "as","at","by","from","not","so","if","then","than","too","very","just","like","really","kind","sort",
-  ]);
-  return normalize(s)
-    .split(" ")
-    .filter((w) => w.length >= 3 && !stop.has(w));
-}
-
-function computeScore(messageTokens, rowText) {
-  const text = normalize(rowText);
-  let score = 0;
-
-  // Token overlap
-  for (const t of messageTokens) {
-    if (text.includes(t)) score += 2;
-  }
-
-  // Weight certain columns if present (helps ranking)
-  if (text.includes("crisis") || text.includes("988")) score += 1;
-  if (text.includes("mentor")) score += 1;
-  if (text.includes("father") || text.includes("fatherless") || text.includes("absent father")) score += 3;
-
-  return score;
-}
-
-function likelyCrisis(message) {
-  const m = normalize(message);
-  const flags = [
-    "suicid", "kill myself", "end my life", "self harm", "hurt myself",
-    "i want to die", "i dont want to live", "overdose", "cutting",
-  ];
-  return flags.some((f) => m.includes(f));
-}
-
-function toCsvExportUrl(maybeEditUrl) {
-  const s = String(maybeEditUrl || "").trim();
-  if (!s) return "";
-  if (s.includes("output=csv")) return s;
-
-  // If user pasted a normal Sheets "edit" URL, convert best-effort.
-  // This works when the sheet is accessible and the gid exists.
-  const matchId = s.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  if (!matchId) return s;
-
-  const id = matchId[1];
-  const gidMatch = s.match(/[?&#]gid=([0-9]+)/);
-  const gid = gidMatch ? gidMatch[1] : "0";
-
-  return `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
-}
-
-async function fetchSheetRows(sheetUrl) {
-  const csvUrl = toCsvExportUrl(sheetUrl);
-  const r = await fetch(csvUrl, { method: "GET" });
-  if (!r.ok) throw new Error(`Failed to fetch sheet CSV (${r.status})`);
-  const csv = await r.text();
-
-  // Use PapaParse if available, otherwise minimal CSV fallback.
-  let rows = [];
-  try {
-    // eslint-disable-next-line global-require
-    const Papa = require("papaparse");
-    const parsed = Papa.parse(csv, { header: true, skipEmptyLines: true });
-    rows = (parsed.data || []).filter(Boolean);
-  } catch {
-    // Fallback: very simple CSV parsing (assumes no embedded commas).
-    const lines = csv.split("\n").map((x) => x.trim()).filter(Boolean);
-    const header = lines.shift().split(",").map((x) => x.trim());
-    rows = lines.map((line) => {
-      const cells = line.split(",").map((x) => x.trim());
-      const obj = {};
-      header.forEach((h, i) => (obj[h] = cells[i] || ""));
-      return obj;
-    });
-  }
-
-  // Normalize expected columns
-  return rows.map((r) => ({
-    id: r.id || r.ID || "",
-    title: r.title || r.Title || "",
-    description: r.description || r.Description || "",
-    best_for: r.best_for || r.bestFor || "",
-    when_to_use: r.when_to_use || r.whenToUse || "",
-    not_for: r.not_for || r.notFor || "",
-    fatherlessness_connection: r.fatherlessness_connection || r.fatherlessnessConnection || "",
-    url: r.url || r.URL || "",
-  }));
-}
-
-function buildCandidateText(row) {
-  return [
-    row.title,
-    row.description,
-    row.best_for,
-    row.when_to_use,
-    row.not_for,
-    row.fatherlessness_connection,
-  ].filter(Boolean).join(" | ");
-}
-
-async function callOpenAI({ apiKey, model, message, candidates, crisisMode }) {
-  const system = `
-You are SinePatre’s Resource Navigator, writing for fatherless teenagers.
-Your job is to recommend the best matching resources from the provided list and explain them with maturity, clarity, and warmth.
-
-Rules:
-- Recommend EXACTLY 3 resources from the provided list (unless crisisMode is true).
-- Prioritize fit and specificity over popularity.
-- Write in an eloquent, grounded tone. No clichés, no therapy roleplay, no diagnosing.
-- Do not invent resources, phone numbers, or URLs.
-- If crisisMode is true: put 988 first and strongly encourage immediate real-world support.
-
-Output must be valid JSON ONLY with this shape:
-{
-  "mode": "recommendations" | "crisis",
-  "intro": string,
-  "resources": [
-    {
-      "title": string,
-      "url": string,
-      "why_this_matches": string,
-      "how_to_use": string,
-      "watch_out_for": string
-    }
-  ]
-}
-`.trim();
-
-  const user = `
-User message:
-${message}
-
-Candidate resources (choose from these only):
-${JSON.stringify(candidates, null, 2)}
-`.trim();
-
-  const payload = {
-    model,
-    input: [
-      { role: "system", content: [{ type: "text", text: system }] },
-      { role: "user", content: [{ type: "text", text: user }] },
-    ],
-    // Do NOT set temperature here. Some GPT-5 variants only support the default value. :contentReference[oaicite:0]{index=0}
-    response_format: { type: "json_object" },
-  };
-
-  const resp = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const raw = await resp.text();
-  if (!resp.ok) {
-    throw new Error(`OpenAI error (${resp.status}): ${raw}`);
-  }
-
-  let data;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    throw new Error(`OpenAI returned non-JSON: ${raw.slice(0, 500)}`);
-  }
-
-  // Responses API often returns output text in different shapes; handle common ones.
-  const outputText =
-    data.output_text ||
-    (data.output &&
-      Array.isArray(data.output) &&
-      data.output
-        .flatMap((o) => o.content || [])
-        .map((c) => c.text)
-        .filter(Boolean)
-        .join("\n")) ||
-    "";
-
-  if (!outputText) throw new Error("OpenAI returned empty output_text.");
-
-  let parsed;
-  try {
-    parsed = JSON.parse(outputText);
-  } catch {
-    throw new Error(`Model did not return JSON object. Got: ${outputText.slice(0, 500)}`);
-  }
-
-  return parsed;
-}
-
-module.exports = async (req, res) => {
-  try {
-    if (req.method !== "POST") {
-      return json(res, 405, { error: "POST only" });
+    :root{
+      --ink: #0a0a0b;
+      --muted: rgba(255,255,255,0.70);
+      --muted2: rgba(255,255,255,0.55);
+      --panel: rgba(255,255,255,0.055);
+      --panelBorder: rgba(255,255,255,0.12);
+      --field: rgba(0,0,0,0.20);
+      --fieldBorder: rgba(255,255,255,0.14);
+      --hairline: rgba(255,255,255,0.10);
+      --white: #ffffff;
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    const sheetUrl = process.env.SHEET_CSV_URL;
-    const model = process.env.OPENAI_MODEL || DEFAULT_MODEL;
+    *{ box-sizing: border-box; }
+    html, body { height: 100%; }
+    body{
+      margin: 0;
+      font-family: 'EB Garamond', Georgia, serif;
+      background: #0f0f10;
+      color: #fff;
+      letter-spacing: -0.01em;
+    }
 
-    if (!apiKey) return json(res, 500, { error: "Missing OPENAI_API_KEY env var" });
-    if (!sheetUrl) return json(res, 500, { error: "Missing SHEET_CSV_URL env var" });
+    /* HERO */
+    .hero{
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding: 84px 0 72px;
+      position: relative;
+      overflow: hidden;
+    }
 
-    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-    const message = String(body?.message || "").trim();
-    if (!message) return json(res, 400, { error: "Missing message" });
+    .hero::before{
+      content: '';
+      position: absolute;
+      top: -45%;
+      right: -12%;
+      width: 680px;
+      height: 680px;
+      background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
 
-    const crisisMode = likelyCrisis(message);
+    .hero::after{
+      content: '';
+      position: absolute;
+      bottom: -40%;
+      left: -8%;
+      width: 560px;
+      height: 560px;
+      background: radial-gradient(circle, rgba(255,255,255,0.035) 0%, transparent 70%);
+      pointer-events: none;
+    }
 
-    const rows = await fetchSheetRows(sheetUrl);
+    .wrap{
+      width: min(980px, 100%);
+      margin: 0 auto;
+      padding: 0 22px;
+      position: relative;
+      z-index: 1;
+    }
 
-    // If your sheet has blank lines or partial rows, drop them.
-    const usable = rows.filter((r) => r.title && r.url);
+    .top{
+      text-align: center;
+      margin-bottom: 26px;
+    }
 
-    // Score and shortlist candidates (keep it small so the AI stays grounded).
-    const msgTokens = tokenize(message);
-    const scored = usable
-      .map((r) => {
-        const text = buildCandidateText(r);
-        const score = computeScore(msgTokens, text);
-        return { row: r, score };
-      })
-      .sort((a, b) => b.score - a.score);
+    .chip{
+      display: inline-block;
+      padding: 10px 22px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.28);
+      background: transparent;
+      color: rgba(255,255,255,0.72);
+      font-size: 12px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      font-weight: 500;
+      margin-bottom: 18px;
+    }
 
-    // Keep top candidates, but ensure we include crisis lines if crisisMode.
-    let top = scored.slice(0, 12).map((x) => x.row);
+    h1{
+      margin: 0 0 14px;
+      font-weight: 400;
+      font-size: 64px;
+      line-height: 1.08;
+      letter-spacing: -0.02em;
+    }
 
-    if (crisisMode) {
-      const mustHave = usable.filter((r) =>
-        normalize(r.title).includes("988") ||
-        normalize(r.title).includes("crisis") ||
-        normalize(r.description).includes("988")
-      );
-      for (const r of mustHave) {
-        if (!top.find((t) => t.url === r.url)) top.unshift(r);
+    .desc{
+      margin: 0 auto;
+      max-width: 840px;
+      color: rgba(255,255,255,0.70);
+      font-size: 18px;
+      line-height: 1.65;
+      letter-spacing: 0.15px;
+    }
+
+    .desc strong{ color: rgba(255,255,255,0.92); font-weight: 700; }
+
+    /* PANEL */
+    .panel{
+      margin: 26px auto 0;
+      background: var(--panel);
+      border: 1px solid var(--panelBorder);
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+      backdrop-filter: blur(8px);
+    }
+
+    .transcript{
+      height: min(46vh, 420px);
+      overflow: auto;
+      padding: 10px 10px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--hairline);
+      background: rgba(0,0,0,0.16);
+    }
+
+    .line{
+      margin: 0;
+      padding: 10px 6px;
+      font-size: 17px;
+      line-height: 1.6;
+      color: rgba(255,255,255,0.92);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .line:last-child{ border-bottom: none; }
+
+    .who{
+      display: inline-block;
+      min-width: 92px;
+      color: rgba(255,255,255,0.62);
+      letter-spacing: 0.04em;
+    }
+
+    .line.assistant .who{ color: rgba(255,255,255,0.70); }
+    .line.user .who{ color: rgba(255,255,255,0.58); }
+
+    .composer{
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .input{
+      flex: 1;
+      border-radius: 14px;
+      border: 1px solid var(--fieldBorder);
+      background: var(--field);
+      padding: 12px 12px;
+      color: rgba(255,255,255,0.92);
+      outline: none;
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 18px;
+      line-height: 1.45;
+      resize: none;
+      min-height: 48px;
+      max-height: 140px;
+      overflow: auto;
+    }
+
+    .input::placeholder{ color: rgba(255,255,255,0.48); }
+
+    .actions{
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding-bottom: 2px;
+    }
+
+    .iconBtn{
+      width: 44px;
+      height: 44px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.92);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, opacity 160ms ease;
+      position: relative;
+      user-select: none;
+    }
+
+    .iconBtn:hover{
+      transform: translateY(-1px);
+      background: rgba(255,255,255,0.10);
+      border-color: rgba(255,255,255,0.18);
+    }
+
+    .iconBtn:disabled{
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .iconBtn svg{
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* Tooltip (hover) */
+    .iconBtn[data-tip]::after{
+      content: attr(data-tip);
+      position: absolute;
+      bottom: 54px;
+      right: 0;
+      background: rgba(10,10,11,0.92);
+      color: rgba(255,255,255,0.92);
+      border: 1px solid rgba(255,255,255,0.14);
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.2;
+      white-space: nowrap;
+      opacity: 0;
+      transform: translateY(6px);
+      pointer-events: none;
+      transition: opacity 140ms ease, transform 140ms ease;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+    }
+
+    .iconBtn[data-tip]:hover::after{
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .subnote{
+      margin-top: 10px;
+      color: rgba(255,255,255,0.55);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .subnote strong{ color: rgba(255,255,255,0.90); font-weight: 700; }
+
+    /* Responsive */
+    @media (max-width: 820px){
+      h1{ font-size: clamp(38px, 6vw, 52px); }
+      .desc{ font-size: 16px; }
+      .transcript{ height: min(48vh, 420px); }
+    }
+  </style>
+</head>
+
+<body>
+  <section class="hero">
+    <div class="wrap">
+      <div class="top">
+        <div class="chip">Resource Navigator</div>
+        <h1>Find support that actually fits</h1>
+        <p class="desc">
+          This is a private, conversational guide built for fatherless teens who want something more precise than generic links.
+          Tell the navigator what is happening, what you want next, and what kind of support feels realistic right now.
+          It will respond thoughtfully and recommend a short, high-fit set of vetted options, with clear reasoning and next steps.
+          If you are in immediate danger, or thinking about harming yourself, call or text <strong>988</strong> right now.
+        </p>
+      </div>
+
+      <div class="panel">
+        <div id="transcript" class="transcript" aria-live="polite" aria-label="Chat transcript">
+          <p class="line assistant">
+            <span class="who">Navigator</span>
+            Start anywhere. If it helps, say what you are feeling, what you want, and what kind of support would feel doable this week.
+          </p>
+        </div>
+
+        <div class="composer" role="group" aria-label="Message composer">
+          <textarea
+            id="input"
+            class="input"
+            rows="1"
+            placeholder="Write your message. Press Enter to send, Shift+Enter for a new line."
+          ></textarea>
+
+          <div class="actions">
+            <button id="newChat" class="iconBtn" type="button" data-tip="Create new chat" aria-label="Create new chat">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5v14"></path>
+                <path d="M5 12h14"></path>
+              </svg>
+            </button>
+
+            <button id="send" class="iconBtn" type="button" data-tip="Send" aria-label="Send message">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12h13"></path>
+                <path d="M13 5l7 7-7 7"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="subnote">
+          The clearer you are about what you want, someone to talk to, coping skills, grief support, mentorship, community, therapy options, the better the match.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const transcriptEl = document.getElementById("transcript");
+    const inputEl = document.getElementById("input");
+    const sendBtn = document.getElementById("send");
+    const newChatBtn = document.getElementById("newChat");
+
+    // In-memory chat history (also sent to your API; safe if your API ignores it).
+    let history = [
+      { role: "assistant", content: "Start anywhere. If it helps, say what you are feeling, what you want, and what kind of support would feel doable this week." }
+    ];
+
+    function appendLine(role, text){
+      const p = document.createElement("p");
+      p.className = "line " + (role === "assistant" ? "assistant" : "user");
+
+      const who = document.createElement("span");
+      who.className = "who";
+      who.textContent = role === "assistant" ? "Navigator" : "You";
+
+      const content = document.createElement("span");
+      content.textContent = text;
+
+      p.appendChild(who);
+      p.appendChild(content);
+      transcriptEl.appendChild(p);
+
+      // Scroll to bottom
+      transcriptEl.scrollTop = transcriptEl.scrollHeight;
+    }
+
+    function setBusy(isBusy){
+      sendBtn.disabled = isBusy;
+      newChatBtn.disabled = isBusy;
+    }
+
+    function autoGrow(el){
+      el.style.height = "auto";
+      el.style.height = Math.min(el.scrollHeight, 140) + "px";
+    }
+
+    function resetComposer(){
+      inputEl.value = "";
+      inputEl.style.height = "auto";
+      inputEl.focus();
+    }
+
+    function clearChat(){
+      transcriptEl.innerHTML = "";
+      appendLine("assistant", "Start anywhere. If it helps, say what you are feeling, what you want, and what kind of support would feel doable this week.");
+      history = [
+        { role: "assistant", content: "Start anywhere. If it helps, say what you are feeling, what you want, and what kind of support would feel doable this week." }
+      ];
+      resetComposer();
+    }
+
+    async function send(){
+      const message = (inputEl.value || "").trim();
+      if (!message) return;
+
+      appendLine("user", message);
+      history.push({ role: "user", content: message });
+
+      resetComposer();
+      setBusy(true);
+
+      // Lightweight typing line (single line, not a bubble)
+      const typingId = "typing-" + Math.random().toString(16).slice(2);
+      const typingLine = document.createElement("p");
+      typingLine.className = "line assistant";
+      typingLine.id = typingId;
+
+      const who = document.createElement("span");
+      who.className = "who";
+      who.textContent = "Navigator";
+
+      const content = document.createElement("span");
+      content.textContent = "Thinking…";
+
+      typingLine.appendChild(who);
+      typingLine.appendChild(content);
+      transcriptEl.appendChild(typingLine);
+      transcriptEl.scrollTop = transcriptEl.scrollHeight;
+
+      try{
+        const controller = new AbortController();
+
+        // If your API sometimes hangs, this prevents endless waiting.
+        const timeout = setTimeout(() => controller.abort(), 30000);
+
+        const res = await fetch("/api/navigate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            message,
+            history // your backend can use this for better conversational continuity
+          })
+        });
+
+        clearTimeout(timeout);
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok){
+          throw new Error(data?.error || data?.detail || "Request failed");
+        }
+
+        // Remove typing line
+        const t = document.getElementById(typingId);
+        if (t) t.remove();
+
+        // Accept a few possible shapes, so you do not get stuck if backend changes.
+        // Preferred: { reply: "..." }
+        // Fallbacks: { text: "..." } or { intro: "...", resources:[...] } etc.
+        let reply =
+          data?.reply ||
+          data?.text ||
+          data?.response ||
+          data?.assistant ||
+          "";
+
+        // If your endpoint still returns recommendations format, convert it into chat text.
+        if (!reply && (Array.isArray(data?.resources) || data?.intro)){
+          const intro = data?.intro ? String(data.intro).trim() : "";
+          const resources = Array.isArray(data.resources) ? data.resources : [];
+          const lines = [];
+
+          if (intro) lines.push(intro);
+
+          if (resources.length){
+            lines.push("");
+            lines.push("Here are the best matches for what you described:");
+            lines.push("");
+            resources.slice(0, 8).forEach((r, i) => {
+              const title = r.title || r.name || "Resource";
+              const why = r.why || r.reason || r.description || "";
+              const url = r.url || r.website || "";
+              const chunk = [
+                (i+1) + ". " + title,
+                why ? "   " + why : "",
+                url ? "   " + url : ""
+              ].filter(Boolean).join("\n");
+              lines.push(chunk);
+              lines.push("");
+            });
+          }
+
+          reply = lines.join("\n").trim();
+        }
+
+        if (!reply){
+          reply = "I received an empty response from the server. Check your Vercel logs for /api/navigate.";
+        }
+
+        appendLine("assistant", reply);
+        history.push({ role: "assistant", content: reply });
+
+      } catch (err){
+        // Remove typing line if present
+        const t = document.getElementById(typingId);
+        if (t) t.remove();
+
+        const msg =
+          (err && err.name === "AbortError")
+            ? "That request took too long. Try again, and if it keeps happening, you will want to speed up /api/navigate."
+            : "Something went wrong. Check Vercel Runtime Logs for /api/navigate and confirm your environment variables are set.";
+
+        appendLine("assistant", msg);
+        history.push({ role: "assistant", content: msg });
+      } finally {
+        setBusy(false);
+        inputEl.focus();
       }
-      top = top.slice(0, 15);
     }
 
-    // Build a compact candidate object for the model.
-    const candidates = top.map((r) => ({
-      title: r.title,
-      url: r.url,
-      description: r.description,
-      best_for: r.best_for,
-      when_to_use: r.when_to_use,
-      not_for: r.not_for,
-      fatherlessness_connection: r.fatherlessness_connection,
-    }));
+    // Events
+    sendBtn.addEventListener("click", send);
+    newChatBtn.addEventListener("click", clearChat);
 
-    const result = await callOpenAI({
-      apiKey,
-      model,
-      message,
-      candidates,
-      crisisMode,
+    inputEl.addEventListener("input", () => autoGrow(inputEl));
+
+    // Enter to send, Shift+Enter for newline
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey){
+        e.preventDefault();
+        send();
+      }
     });
 
-    // Safety check: force exactly 3 in normal mode.
-    if (result?.mode !== "crisis") {
-      if (Array.isArray(result?.resources)) result.resources = result.resources.slice(0, 3);
-    }
-
-    return json(res, 200, result);
-  } catch (err) {
-    return json(res, 500, {
-      error: "Server error",
-      detail: String(err?.message || err),
-    });
-  }
-};
+    // Start focused
+    inputEl.focus();
+  </script>
+</body>
+</html>
