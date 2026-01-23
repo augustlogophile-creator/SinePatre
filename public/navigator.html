@@ -1,4 +1,4 @@
-<!-- navigator.html -->
+<!-- navigator.html (same changes as index) -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -48,10 +48,19 @@
       padding: 42px 18px;
     }
 
-    .wrap{ width: min(900px, 100%); }
+    .wrap{ width: min(920px, 100%); }
+
+    .descBox{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      padding: 22px 18px;
+      text-align: center;
+    }
 
     .brand{
-      display: flex;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 12px;
@@ -78,29 +87,39 @@
     h1{
       margin: 0;
       font-weight: 500;
-      font-size: 56px;
+      font-size: 54px;
       line-height: 1.06;
       letter-spacing: -0.03em;
-      text-align: center;
+    }
+
+    h1 a{
+      color: inherit;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(255,255,255,0.18);
+      padding-bottom: 2px;
+    }
+    h1 a:hover{
+      border-bottom-color: rgba(255,255,255,0.34);
     }
 
     .sub{
       margin: 10px auto 0;
-      max-width: 780px;
-      text-align: center;
+      max-width: 820px;
       color: var(--muted);
-      font-size: 18px;
+      font-size: 17px;
       line-height: 1.60;
     }
 
     .sub strong{ color: rgba(255,255,255,0.90); font-weight: 700; }
 
+    .chatWrap{
+      margin-top: 18px;
+    }
+
     .panel{
-      margin: 22px auto 0;
-      background: var(--panel);
-      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.08);
       border-radius: 18px;
-      box-shadow: var(--shadow);
       overflow: hidden;
     }
 
@@ -113,17 +132,17 @@
 
     .bubbleRow{
       display: flex;
-      margin: 10px 0;
+      margin: 9px 0;
     }
 
     .bubbleRow.user{ justify-content: flex-start; }
     .bubbleRow.ai{ justify-content: flex-end; }
 
     .bubble{
-      max-width: min(640px, 92%);
-      padding: 12px 14px;
+      max-width: min(660px, 92%);
+      padding: 11px 13px;
       border-radius: 16px;
-      font-size: 18px;
+      font-size: 16.5px;
       line-height: 1.55;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
@@ -160,7 +179,7 @@
       color: var(--text);
       outline: none;
       font-family: 'EB Garamond', Georgia, serif;
-      font-size: 18px;
+      font-size: 17px;
       line-height: 1.45;
       resize: none;
       min-height: 50px;
@@ -251,12 +270,10 @@
       text-align: center;
     }
 
-    .foot strong{ color: rgba(255,255,255,0.88); font-weight: 700; }
-
     @media (max-width: 820px){
-      h1{ font-size: clamp(38px, 7vw, 52px); }
+      h1{ font-size: clamp(36px, 7vw, 50px); }
       .sub{ font-size: 16px; }
-      .bubble{ font-size: 17px; }
+      .bubble{ font-size: 16px; }
     }
   </style>
 </head>
@@ -264,60 +281,65 @@
 <body>
   <main class="page">
     <div class="wrap">
-      <div class="brand" aria-label="SinePatre Resource Navigator">
-        <span class="mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24">
-            <path d="M12 2v6"></path>
-            <path d="M12 16v6"></path>
-            <path d="M2 12h6"></path>
-            <path d="M16 12h6"></path>
-            <path d="M4.6 4.6l4.2 4.2"></path>
-            <path d="M15.2 15.2l4.2 4.2"></path>
-            <path d="M19.4 4.6l-4.2 4.2"></path>
-            <path d="M8.8 15.2l-4.2 4.2"></path>
-            <circle cx="12" cy="12" r="2.3"></circle>
-          </svg>
-        </span>
-        <div style="color: var(--muted2); font-size: 14px; letter-spacing: 0.06em;">SinePatre</div>
-      </div>
-
-      <h1>Resource Navigator</h1>
-      <p class="sub">
-        A private guide built on a curated database of vetted support options for fatherless teens.
-        Share what is happening, what you want next, and what feels realistic right now.
-        You will receive a short, high-fit set of recommendations, each explained clearly so you can choose with confidence.
-        If you are in immediate danger or thinking about harming yourself, call or text <strong>988</strong>.
-      </p>
-
-      <section class="panel" aria-label="Chat panel">
-        <div id="chat" class="chat" aria-live="polite" aria-label="Chat transcript"></div>
-
-        <div class="composer" role="group" aria-label="Message composer">
-          <textarea
-            id="input"
-            class="input"
-            rows="1"
-            placeholder="What do you want help with?"
-          ></textarea>
-
-          <button id="newChat" class="btn" type="button" data-tip="Start new chat" aria-label="Start new chat">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 5v14"></path>
-              <path d="M5 12h14"></path>
+      <section class="descBox" aria-label="Description">
+        <div class="brand" aria-label="SinePatre Resource Navigator">
+          <span class="mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 2v6"></path>
+              <path d="M12 16v6"></path>
+              <path d="M2 12h6"></path>
+              <path d="M16 12h6"></path>
+              <path d="M4.6 4.6l4.2 4.2"></path>
+              <path d="M15.2 15.2l4.2 4.2"></path>
+              <path d="M19.4 4.6l-4.2 4.2"></path>
+              <path d="M8.8 15.2l-4.2 4.2"></path>
+              <circle cx="12" cy="12" r="2.3"></circle>
             </svg>
-          </button>
-
-          <button id="send" class="btn primary" type="button" data-tip="Send" aria-label="Send">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M5 12h13"></path>
-              <path d="M13 5l7 7-7 7"></path>
-            </svg>
-          </button>
+          </span>
+          <div style="color: var(--muted2); font-size: 14px; letter-spacing: 0.06em;">SinePatre</div>
         </div>
+
+        <h1><a href="https://sinepatre.com" target="_blank" rel="noreferrer">Resource Navigator</a></h1>
+
+        <p class="sub">
+          A private guide built on a curated database of vetted support options for fatherless teens.
+          Share what is happening, what you want next, and what feels realistic right now.
+          You will receive a short, high-fit set of recommendations, each explained clearly so you can choose with confidence.
+          If you are in immediate danger or thinking about harming yourself, call or text <strong>988</strong>.
+        </p>
       </section>
 
-      <div class="foot">
-        Tip: Include one concrete detail, for example “someone to talk to tonight,” “grief,” “anger,” “school stress,” or “mentorship.”
+      <div class="chatWrap">
+        <section class="panel" aria-label="Chat panel">
+          <div id="chat" class="chat" aria-live="polite" aria-label="Chat transcript"></div>
+
+          <div class="composer" role="group" aria-label="Message composer">
+            <textarea
+              id="input"
+              class="input"
+              rows="1"
+              placeholder="What do you want help with?"
+            ></textarea>
+
+            <button id="newChat" class="btn" type="button" data-tip="Start new chat" aria-label="Start new chat">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5v14"></path>
+                <path d="M5 12h14"></path>
+              </svg>
+            </button>
+
+            <button id="send" class="btn primary" type="button" data-tip="Send" aria-label="Send">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12h13"></path>
+                <path d="M13 5l7 7-7 7"></path>
+              </svg>
+            </button>
+          </div>
+        </section>
+
+        <div class="foot">
+          Tip: Include one concrete detail, for example “someone to talk to,” “grief,” “anger,” “school stress,” or “mentorship.”
+        </div>
       </div>
     </div>
   </main>
@@ -365,6 +387,28 @@
       resetComposer();
     }
 
+    function formatReply(data){
+      const intro = data?.intro ? String(data.intro).trim() : "";
+      const resources = Array.isArray(data?.resources) ? data.resources : [];
+
+      const lines = [];
+      if (intro) lines.push(intro);
+
+      if (resources.length){
+        lines.push("");
+        resources.slice(0, 3).forEach((r, i) => {
+          const title = r.title || "Resource";
+          const why = r.why ? String(r.why).trim() : "";
+          const url = r.url ? String(r.url).trim() : "";
+          lines.push((i + 1) + ". " + title + (url ? " — " + url : ""));
+          if (why) lines.push(why);
+          lines.push("");
+        });
+      }
+
+      return lines.join("\n").trim();
+    }
+
     async function send(){
       const message = (inputEl.value || "").trim();
       if (!message) return;
@@ -382,7 +426,7 @@
 
       const typingBubble = document.createElement("div");
       typingBubble.className = "bubble ai";
-      typingBubble.textContent = "Thinking";
+      typingBubble.textContent = "Thinking...";
 
       typingRow.appendChild(typingBubble);
       chatEl.appendChild(typingRow);
@@ -403,35 +447,7 @@
         const t = document.getElementById(typingId);
         if (t) t.remove();
 
-        let reply = "";
-
-        if (data?.intro || Array.isArray(data?.resources)){
-          const intro = data?.intro ? String(data.intro).trim() : "";
-          const resources = Array.isArray(data.resources) ? data.resources : [];
-
-          const lines = [];
-          if (intro) lines.push(intro);
-
-          if (resources.length){
-            lines.push("");
-            resources.slice(0, 3).forEach((r, i) => {
-              const title = r.title || "Resource";
-              const why = r.why ? String(r.why).trim() : "";
-              const url = r.url ? String(r.url).trim() : "";
-              lines.push((i + 1) + ". " + title);
-              if (why) lines.push("   " + why);
-              if (url) lines.push("   " + url);
-              lines.push("");
-            });
-          }
-
-          reply = lines.join("\n").trim();
-        }
-
-        if (!reply){
-          reply = "I received an empty response from the server. Check Vercel logs for /api/navigate.";
-        }
-
+        const reply = formatReply(data) || "I received an empty response from the server. Check Vercel logs for /api/navigate.";
         appendBubble("assistant", reply);
         history.push({ role: "assistant", content: reply });
 
