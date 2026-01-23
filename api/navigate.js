@@ -12,17 +12,16 @@ const SAFETY_REGEX = [
   /\b(abuse|sexual assault|rape|molested)\b/i,
 ];
 
-function setCors(res) {
-  // You can tighten this later to your Squarespace domain.
+function setCors(req, res) {
+  // Keep * for testing. Tighten later to sinepatre.com only.
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  // Optional: cache preflight
   res.setHeader("Access-Control-Max-Age", "86400");
 }
 
-function send(res, status, payload) {
-  setCors(res);
+function send(req, res, status, payload) {
+  setCors(req, res);
   res.status(status).json(payload);
 }
 
@@ -130,15 +129,15 @@ async function openaiJSON(apiKey, messages) {
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       model: "gpt-5-mini",
-      temperature: 0.2,
+      // IMPORTANT: gpt-5-mini does not support custom temperature values here, so omit it.
       response_format: { type: "json_object" },
-      messages
-    })
+      messages,
+    }),
   });
 
   if (!r.ok) {
@@ -164,7 +163,7 @@ function scoreResource(resource, queryTokens, tagTokens) {
 }
 
 export default async function handler(req, res) {
-  setCors(res);
+  setCors(req, res);
 
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -173,32 +172,32 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== "POST") {
-    return send(res, 405, { error: "POST only" });
+    return send(req, res, 405, { error: "POST only" });
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
   const csvUrl = process.env.GOOGLE_SHEET_CSV_URL;
 
   if (!apiKey || !csvUrl) {
-    return send(res, 500, { error: "Missing environment variables" });
+    return send(req, res, 500, { error: "Missing environment variables" });
   }
 
   const message = String(req.body?.message || "").trim();
-  if (!message) return send(res, 400, { error: "Missing message" });
+  if (!message) return send(req, res, 400, { error: "Missing message" });
   if (message.length > MAX_MESSAGE_LENGTH) {
-    return send(res, 400, { error: "Message too long" });
+    return send(req, res, 400, { error: "Message too long" });
   }
 
   if (triggeredSafety(message)) {
-    return send(res, 200, {
+    return send(req, res, 200, {
       mode: "safety",
       intro: "You deserve immediate support. Please use one of these resources now.",
       resources: [
         { title: "988 Suicide & Crisis Lifeline", url: "https://988lifeline.org" },
         { title: "Crisis Text Line", url: "https://www.crisistextline.org" },
         { title: "Teen Line", url: "https://teenline.org" },
-        { title: "Childhelp Hotline", url: "https://www.childhelp.org/hotline/" }
-      ]
+        { title: "Childhelp Hotline", url: "https://www.childhelp.org/hotline/" },
+      ],
     });
   }
 
@@ -209,9 +208,9 @@ export default async function handler(req, res) {
       {
         role: "system",
         content:
-          "You classify a fatherless teen's need. Output JSON with need_tags (3-6 short phrases), urgency (low|medium|high). Do not give advice."
+          "You classify a fatherless teen's need. Output JSON with need_tags (3-6 short phrases), urgency (low|medium|high). Do not give advice.",
       },
-      { role: "user", content: message }
+      { role: "user", content: message },
     ]);
 
     const queryTokens = tokenize(message);
@@ -225,11 +224,11 @@ export default async function handler(req, res) {
       .map(x => x.r);
 
     if (!ranked.length) {
-      return send(res, 200, {
+      return send(req, res, 200, {
         mode: "no_match",
         intro:
           "I could not find a strong match yet. Try describing what you are feeling or what kind of help you want.",
-        resources: []
+        resources: [],
       });
     }
 
@@ -237,23 +236,30 @@ export default async function handler(req, res) {
       {
         role: "system",
         content:
-          "You recommend resources. Use only the provided list. No advice. Return JSON: { intro: string, resources: [{title, url, why}] }."
+          "You recommend resources. Use only the provided list. No advice. Return JSON: { intro: string, resources: [{title, url, why}] }.",
       },
-      {
-        role: "user",
-        content: JSON.stringify({ message, resources: ranked })
-      }
+      { role: "user", content: JSON.stringify({ message, resources: ranked }) },
     ]);
 
-    return send(res, 200, {
+    return send(req, res, 200, {
       mode: "recommendations",
       intro: response.intro || "Here are resources that best match what you shared.",
-      resources: Array.isArray(response.resources) ? response.resources : []
+      resources: Array.isArray(response.resources) ? response.resources : [],
     });
   } catch (err) {
-    return send(res, 500, {
+    const msg = String(err?.message || err);
+
+    if (msg.includes("insufficient_quota")) {
+      return send(req, res, 402, {
+        error: "OpenAI billing not active",
+        detail:
+          "Your API key has no available quota. Confirm billing is enabled and you have remaining credits.",
+      });
+    }
+
+    return send(req, res, 500, {
       error: "Server error",
-      detail: String(err?.message || err)
+      detail: msg,
     });
   }
 }
