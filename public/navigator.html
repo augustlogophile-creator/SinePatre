@@ -1,213 +1,304 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SinePatre Resource Navigator</title>
+// /api/navigate.js
+// Resource Navigator API (Vercel Serverless Function)
+// - Reads your Google Sheet (CSV) from SHEET_CSV_URL
+// - Picks strong candidate matches with a simple relevance score
+// - Uses OpenAI to choose the BEST 3 and write high-quality guidance
+//
+// Required env vars on Vercel:
+// - OPENAI_API_KEY
+// - SHEET_CSV_URL  (must be a CSV export URL, not the normal "edit" link)
+// Optional:
+// - OPENAI_MODEL (default: gpt-5-mini)
 
-    <style>
-      body {
-        margin: 0;
-        background: #0b0c10;
-        color: #e9eef7;
-        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+const DEFAULT_MODEL = "gpt-5-mini";
+
+function json(res, status, body) {
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.end(JSON.stringify(body));
+}
+
+function normalize(s) {
+  return String(s || "")
+    .toLowerCase()
+    .replace(/[\u2019’]/g, "'")
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenize(s) {
+  const stop = new Set([
+    "the","a","an","and","or","but","to","of","in","on","for","with","is","are","was","were","be","been","being",
+    "i","me","my","mine","you","your","yours","we","our","ours","they","their","theirs","it","its","this","that",
+    "as","at","by","from","not","so","if","then","than","too","very","just","like","really","kind","sort",
+  ]);
+  return normalize(s)
+    .split(" ")
+    .filter((w) => w.length >= 3 && !stop.has(w));
+}
+
+function computeScore(messageTokens, rowText) {
+  const text = normalize(rowText);
+  let score = 0;
+
+  // Token overlap
+  for (const t of messageTokens) {
+    if (text.includes(t)) score += 2;
+  }
+
+  // Weight certain columns if present (helps ranking)
+  if (text.includes("crisis") || text.includes("988")) score += 1;
+  if (text.includes("mentor")) score += 1;
+  if (text.includes("father") || text.includes("fatherless") || text.includes("absent father")) score += 3;
+
+  return score;
+}
+
+function likelyCrisis(message) {
+  const m = normalize(message);
+  const flags = [
+    "suicid", "kill myself", "end my life", "self harm", "hurt myself",
+    "i want to die", "i dont want to live", "overdose", "cutting",
+  ];
+  return flags.some((f) => m.includes(f));
+}
+
+function toCsvExportUrl(maybeEditUrl) {
+  const s = String(maybeEditUrl || "").trim();
+  if (!s) return "";
+  if (s.includes("output=csv")) return s;
+
+  // If user pasted a normal Sheets "edit" URL, convert best-effort.
+  // This works when the sheet is accessible and the gid exists.
+  const matchId = s.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (!matchId) return s;
+
+  const id = matchId[1];
+  const gidMatch = s.match(/[?&#]gid=([0-9]+)/);
+  const gid = gidMatch ? gidMatch[1] : "0";
+
+  return `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
+}
+
+async function fetchSheetRows(sheetUrl) {
+  const csvUrl = toCsvExportUrl(sheetUrl);
+  const r = await fetch(csvUrl, { method: "GET" });
+  if (!r.ok) throw new Error(`Failed to fetch sheet CSV (${r.status})`);
+  const csv = await r.text();
+
+  // Use PapaParse if available, otherwise minimal CSV fallback.
+  let rows = [];
+  try {
+    // eslint-disable-next-line global-require
+    const Papa = require("papaparse");
+    const parsed = Papa.parse(csv, { header: true, skipEmptyLines: true });
+    rows = (parsed.data || []).filter(Boolean);
+  } catch {
+    // Fallback: very simple CSV parsing (assumes no embedded commas).
+    const lines = csv.split("\n").map((x) => x.trim()).filter(Boolean);
+    const header = lines.shift().split(",").map((x) => x.trim());
+    rows = lines.map((line) => {
+      const cells = line.split(",").map((x) => x.trim());
+      const obj = {};
+      header.forEach((h, i) => (obj[h] = cells[i] || ""));
+      return obj;
+    });
+  }
+
+  // Normalize expected columns
+  return rows.map((r) => ({
+    id: r.id || r.ID || "",
+    title: r.title || r.Title || "",
+    description: r.description || r.Description || "",
+    best_for: r.best_for || r.bestFor || "",
+    when_to_use: r.when_to_use || r.whenToUse || "",
+    not_for: r.not_for || r.notFor || "",
+    fatherlessness_connection: r.fatherlessness_connection || r.fatherlessnessConnection || "",
+    url: r.url || r.URL || "",
+  }));
+}
+
+function buildCandidateText(row) {
+  return [
+    row.title,
+    row.description,
+    row.best_for,
+    row.when_to_use,
+    row.not_for,
+    row.fatherlessness_connection,
+  ].filter(Boolean).join(" | ");
+}
+
+async function callOpenAI({ apiKey, model, message, candidates, crisisMode }) {
+  const system = `
+You are SinePatre’s Resource Navigator, writing for fatherless teenagers.
+Your job is to recommend the best matching resources from the provided list and explain them with maturity, clarity, and warmth.
+
+Rules:
+- Recommend EXACTLY 3 resources from the provided list (unless crisisMode is true).
+- Prioritize fit and specificity over popularity.
+- Write in an eloquent, grounded tone. No clichés, no therapy roleplay, no diagnosing.
+- Do not invent resources, phone numbers, or URLs.
+- If crisisMode is true: put 988 first and strongly encourage immediate real-world support.
+
+Output must be valid JSON ONLY with this shape:
+{
+  "mode": "recommendations" | "crisis",
+  "intro": string,
+  "resources": [
+    {
+      "title": string,
+      "url": string,
+      "why_this_matches": string,
+      "how_to_use": string,
+      "watch_out_for": string
+    }
+  ]
+}
+`.trim();
+
+  const user = `
+User message:
+${message}
+
+Candidate resources (choose from these only):
+${JSON.stringify(candidates, null, 2)}
+`.trim();
+
+  const payload = {
+    model,
+    input: [
+      { role: "system", content: [{ type: "text", text: system }] },
+      { role: "user", content: [{ type: "text", text: user }] },
+    ],
+    // Do NOT set temperature here. Some GPT-5 variants only support the default value. :contentReference[oaicite:0]{index=0}
+    response_format: { type: "json_object" },
+  };
+
+  const resp = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const raw = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`OpenAI error (${resp.status}): ${raw}`);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    throw new Error(`OpenAI returned non-JSON: ${raw.slice(0, 500)}`);
+  }
+
+  // Responses API often returns output text in different shapes; handle common ones.
+  const outputText =
+    data.output_text ||
+    (data.output &&
+      Array.isArray(data.output) &&
+      data.output
+        .flatMap((o) => o.content || [])
+        .map((c) => c.text)
+        .filter(Boolean)
+        .join("\n")) ||
+    "";
+
+  if (!outputText) throw new Error("OpenAI returned empty output_text.");
+
+  let parsed;
+  try {
+    parsed = JSON.parse(outputText);
+  } catch {
+    throw new Error(`Model did not return JSON object. Got: ${outputText.slice(0, 500)}`);
+  }
+
+  return parsed;
+}
+
+module.exports = async (req, res) => {
+  try {
+    if (req.method !== "POST") {
+      return json(res, 405, { error: "POST only" });
+    }
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    const sheetUrl = process.env.SHEET_CSV_URL;
+    const model = process.env.OPENAI_MODEL || DEFAULT_MODEL;
+
+    if (!apiKey) return json(res, 500, { error: "Missing OPENAI_API_KEY env var" });
+    if (!sheetUrl) return json(res, 500, { error: "Missing SHEET_CSV_URL env var" });
+
+    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    const message = String(body?.message || "").trim();
+    if (!message) return json(res, 400, { error: "Missing message" });
+
+    const crisisMode = likelyCrisis(message);
+
+    const rows = await fetchSheetRows(sheetUrl);
+
+    // If your sheet has blank lines or partial rows, drop them.
+    const usable = rows.filter((r) => r.title && r.url);
+
+    // Score and shortlist candidates (keep it small so the AI stays grounded).
+    const msgTokens = tokenize(message);
+    const scored = usable
+      .map((r) => {
+        const text = buildCandidateText(r);
+        const score = computeScore(msgTokens, text);
+        return { row: r, score };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    // Keep top candidates, but ensure we include crisis lines if crisisMode.
+    let top = scored.slice(0, 12).map((x) => x.row);
+
+    if (crisisMode) {
+      const mustHave = usable.filter((r) =>
+        normalize(r.title).includes("988") ||
+        normalize(r.title).includes("crisis") ||
+        normalize(r.description).includes("988")
+      );
+      for (const r of mustHave) {
+        if (!top.find((t) => t.url === r.url)) top.unshift(r);
       }
+      top = top.slice(0, 15);
+    }
 
-      .wrap {
-        max-width: 900px;
-        margin: 0 auto;
-        padding: 28px 18px;
-      }
+    // Build a compact candidate object for the model.
+    const candidates = top.map((r) => ({
+      title: r.title,
+      url: r.url,
+      description: r.description,
+      best_for: r.best_for,
+      when_to_use: r.when_to_use,
+      not_for: r.not_for,
+      fatherlessness_connection: r.fatherlessness_connection,
+    }));
 
-      .card {
-        background: #121420;
-        border: 1px solid #23263a;
-        border-radius: 16px;
-        padding: 20px;
-      }
+    const result = await callOpenAI({
+      apiKey,
+      model,
+      message,
+      candidates,
+      crisisMode,
+    });
 
-      h1 {
-        font-size: 22px;
-        margin: 0 0 8px;
-      }
+    // Safety check: force exactly 3 in normal mode.
+    if (result?.mode !== "crisis") {
+      if (Array.isArray(result?.resources)) result.resources = result.resources.slice(0, 3);
+    }
 
-      p {
-        margin: 0 0 14px;
-        color: #b9c2d6;
-        line-height: 1.45;
-      }
-
-      textarea {
-        width: 100%;
-        min-height: 120px;
-        border-radius: 14px;
-        border: 1px solid #2a2f49;
-        background: #0f1220;
-        color: #e9eef7;
-        padding: 14px;
-        font-size: 15px;
-        outline: none;
-        resize: vertical;
-      }
-
-      button {
-        margin-top: 14px;
-        background: #4f7cff;
-        color: #ffffff;
-        border: none;
-        border-radius: 14px;
-        padding: 12px 16px;
-        font-weight: 700;
-        cursor: pointer;
-      }
-
-      button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-
-      .note {
-        margin-top: 10px;
-        font-size: 12px;
-        color: #9aa6c3;
-      }
-
-      .out {
-        margin-top: 18px;
-      }
-
-      .intro {
-        background: #0f1220;
-        border: 1px solid #23263a;
-        border-radius: 14px;
-        padding: 14px;
-        margin-bottom: 12px;
-        line-height: 1.45;
-      }
-
-      .resource {
-        background: #0f1220;
-        border: 1px solid #23263a;
-        border-radius: 14px;
-        padding: 14px;
-        margin-top: 10px;
-      }
-
-      .resource a {
-        color: #8fb1ff;
-        font-weight: 800;
-        text-decoration: none;
-      }
-
-      .why {
-        margin-top: 6px;
-        font-size: 14px;
-        color: #c9d3ea;
-        line-height: 1.4;
-      }
-
-      .error {
-        background: #2a1212;
-        border: 1px solid #512020;
-        border-radius: 14px;
-        padding: 14px;
-      }
-    </style>
-  </head>
-
-  <body>
-    <div class="wrap">
-      <div class="card">
-        <h1>Resource Navigator</h1>
-        <p>
-          Share what you’re dealing with. This tool will suggest a small number of
-          vetted resources that actually match your situation.
-        </p>
-
-        <textarea
-          id="msg"
-          placeholder="Example: I feel angry about my dad and I don’t know what to do with it."
-        ></textarea>
-
-        <button id="btn">Find resources</button>
-
-        <div class="note">
-          If you are in immediate danger or thinking about harming yourself,
-          call or text 988 right now.
-        </div>
-
-        <div id="out" class="out"></div>
-      </div>
-    </div>
-
-    <script>
-      const btn = document.getElementById("btn");
-      const msg = document.getElementById("msg");
-      const out = document.getElementById("out");
-
-      function esc(s) {
-        return String(s).replace(/[&<>"']/g, c => ({
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#039;"
-        }[c]));
-      }
-
-      btn.addEventListener("click", async () => {
-        const text = msg.value.trim();
-        if (!text) return;
-
-        btn.disabled = true;
-        out.innerHTML = "<div class='intro'>Finding the best resources…</div>";
-
-        try {
-          const res = await fetch("/api/navigate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: text })
-          });
-
-          const data = await res.json();
-
-          if (!res.ok) {
-            out.innerHTML =
-              "<div class='error'><b>Error</b><div class='why'>" +
-              esc(data.detail || data.error || "Something went wrong.") +
-              "</div></div>";
-            return;
-          }
-
-          let html = "";
-
-          if (data.intro) {
-            html += "<div class='intro'>" + esc(data.intro) + "</div>";
-          }
-
-          if (Array.isArray(data.resources)) {
-            for (const r of data.resources) {
-              html += `
-                <div class="resource">
-                  <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">
-                    ${esc(r.title)}
-                  </a>
-                  <div class="why">${esc(r.why || "")}</div>
-                </div>
-              `;
-            }
-          }
-
-          out.innerHTML = html || "<div class='intro'>No matches yet.</div>";
-        } catch (e) {
-          out.innerHTML =
-            "<div class='error'><b>Network error</b><div class='why'>" +
-            esc(e.message) +
-            "</div></div>";
-        } finally {
-          btn.disabled = false;
-        }
-      });
-    </script>
-  </body>
-</html>
+    return json(res, 200, result);
+  } catch (err) {
+    return json(res, 500, {
+      error: "Server error",
+      detail: String(err?.message || err),
+    });
+  }
+};
