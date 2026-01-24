@@ -6,21 +6,10 @@
 // - GOOGLE_SHEET_CSV_URL  (published CSV export link)
 //
 // POST JSON:
-// {
-//   "message": "...",
-//   "history": [{ role:"user"|"assistant", content:"..." }],
-//   "selected_tags": ["talk now","therapy", ...],
-//   "goal": "I want to talk privately" | "I want community" | "I want a mentor" | "I want help coping" | "I want to explore options",
-//   "age_range": "13-15" | "16-18" | "" | etc
-// }
+// { "message": "...", "history": [{role:"user"|"assistant", content:"..."}] }
 //
 // Returns:
-// {
-//   mode: "safety" | "clarify" | "recommendations" | "no_match",
-//   intro: string,
-//   question?: string,
-//   resources: [{ title, url, why, how_to_start?: string[] }]
-// }
+// { mode, intro, question?, resources: [{title,url,why,how_to_start?}] }
 
 const MAX_MESSAGE_LENGTH = 800;
 const MAX_HISTORY_ITEMS = 12;
@@ -32,6 +21,7 @@ const SAFETY_REGEX = [
   /\b(abuse|sexual assault|rape|molested)\b/i,
 ];
 
+// CORS
 function setCors(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -92,10 +82,6 @@ function tokenize(text) {
     "don't",
     "cant",
     "can't",
-    "want",
-    "need",
-    "help",
-    "please",
   ]);
 
   return normalize(text)
@@ -170,7 +156,6 @@ async function loadResources(csvUrl) {
     if (col(c) === -1) throw new Error(`Missing column: ${c}`);
   }
 
-  // Optional column support (won't break if not present)
   const howToStartCol = col("how_to_start");
 
   return rows
@@ -200,18 +185,28 @@ function isCrisisResource(resource) {
   );
 }
 
-function wantSinglePick(message) {
-  const t = normalize(message);
-  return (
-    t.includes("which is the best") ||
-    t.includes("which one is best") ||
-    t.includes("which is best") ||
-    t.includes("pick one") ||
-    t.includes("choose one") ||
-    t.includes("just one") ||
-    t.includes("best one") ||
-    t.includes("the best option")
+function scoreResource(resource, queryTokens, tagTokens) {
+  const haystack = tokenize(
+    `${resource.title} ${resource.description} ${resource.best_for} ${resource.fatherlessness_connection} ${resource.when_to_use} ${resource.not_for}`
   );
+
+  let score = 0;
+  for (const w of haystack) {
+    if (queryTokens.includes(w)) score += 3;
+    if (tagTokens.includes(w)) score += 5;
+  }
+
+  // Small boost for explicit fatherlessness relevance
+  const fatherText = (resource.fatherlessness_connection || "").toLowerCase();
+  if (
+    fatherText.includes("father") ||
+    fatherText.includes("dad") ||
+    fatherText.includes("fatherless")
+  ) {
+    score += 4;
+  }
+
+  return score;
 }
 
 function sanitizeHistory(history) {
@@ -230,16 +225,21 @@ function sanitizeHistory(history) {
   return trimmed.slice(-MAX_HISTORY_ITEMS);
 }
 
-function normalizeTagList(list) {
-  if (!Array.isArray(list)) return [];
-  return list
-    .map((s) => String(s || "").trim())
-    .filter(Boolean)
-    .slice(0, 12);
+function wantSinglePick(message) {
+  const t = normalize(message);
+  return (
+    t.includes("which is the best") ||
+    t.includes("which one is best") ||
+    t.includes("which is best") ||
+    t.includes("pick one") ||
+    t.includes("choose one") ||
+    t.includes("just one") ||
+    t.includes("best one") ||
+    t.includes("the best option")
+  );
 }
 
 function deriveHowToStart(resource) {
-  // Prefer explicit sheet column if present
   const raw = String(resource.how_to_start || "").trim();
   if (raw) {
     return raw
@@ -249,15 +249,12 @@ function deriveHowToStart(resource) {
       .slice(0, 5);
   }
 
-  // Otherwise infer from text (always from this fixed set)
   const text = `${resource.title} ${resource.description} ${resource.when_to_use} ${resource.best_for}`.toLowerCase();
   const steps = [];
   const add = (s) => {
     if (!steps.includes(s)) steps.push(s);
   };
 
-  // Look for hints, but always output from allowed set:
-  // call, text, form, walk-in, referral
   if (/\btext\b|\bsms\b|\bchat\b/.test(text)) add("text");
   if (/\bcall\b|\bphone\b|\bhotline\b/.test(text)) add("call");
   if (/\bapply\b|\bapplication\b|\bintake form\b|\bform\b|\bsign up\b/.test(text))
@@ -266,33 +263,9 @@ function deriveHowToStart(resource) {
   if (/\breferral\b|\breferred\b|\bparent\b|\bschool counselor\b/.test(text))
     add("referral");
 
-  // If still empty, default to "form" (most universal for links)
   if (!steps.length) steps.push("form");
 
   return steps.slice(0, 5);
-}
-
-function scoreResource(resource, queryTokens, tagTokens) {
-  const haystack = tokenize(
-    `${resource.title} ${resource.description} ${resource.best_for} ${resource.fatherlessness_connection} ${resource.when_to_use} ${resource.not_for}`
-  );
-
-  let score = 0;
-  for (const w of haystack) {
-    if (queryTokens.includes(w)) score += 3;
-    if (tagTokens.includes(w)) score += 5;
-  }
-
-  const fatherText = (resource.fatherlessness_connection || "").toLowerCase();
-  if (
-    fatherText.includes("father") ||
-    fatherText.includes("dad") ||
-    fatherText.includes("fatherless")
-  ) {
-    score += 4;
-  }
-
-  return score;
 }
 
 // OpenAI call: returns JSON object
@@ -340,75 +313,59 @@ export default async function handler(req, res) {
   }
 
   const message = String(req.body?.message || "").trim();
+  if (!message) return send(req, res, 400, { error: "Missing message" });
   if (message.length > MAX_MESSAGE_LENGTH) {
     return send(req, res, 400, { error: "Message too long" });
   }
 
   const history = sanitizeHistory(req.body?.history);
-  const selectedTags = normalizeTagList(req.body?.selected_tags);
-  const goal = String(req.body?.goal || "").trim().slice(0, 80);
-  const ageRange = String(req.body?.age_range || "").trim().slice(0, 40);
 
-  const combinedUserText = [
-    message,
-    selectedTags.length ? `Selected topics: ${selectedTags.join(", ")}.` : "",
-    goal ? `Goal: ${goal}.` : "",
-    ageRange ? `Age range: ${ageRange}.` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  // Hard safety gate: skip AI, return crisis resources only
-  if (triggeredSafety(combinedUserText)) {
+  // Hard safety gate
+  if (triggeredSafety(message)) {
     return send(req, res, 200, {
       mode: "safety",
-      intro: "You deserve immediate support right now. Please use one of these options.",
+      intro: "You deserve immediate support. Please use one of these resources now.",
       resources: [
         {
           title: "988 Suicide & Crisis Lifeline",
           url: "https://988lifeline.org",
-          why: "Available 24/7 in the U.S. You can call or text 988 to reach trained counselors who can help in the moment. If you are in immediate danger, call local emergency services.",
+          why: "Available 24/7 in the U.S. You can call or text 988 to reach trained counselors in the moment.",
           how_to_start: ["call", "text"],
         },
         {
           title: "Crisis Text Line",
           url: "https://www.crisistextline.org",
-          why: "Text-based support with trained counselors. This is helpful if speaking out loud feels hard. The site explains the exact steps to start.",
-          how_to_start: ["text", "form"],
+          why: "Text-based support with trained counselors when things feel overwhelming and you want to type instead of talk.",
+          how_to_start: ["text"],
         },
         {
           title: "Teen Line",
           url: "https://teenline.org",
-          why: "A teen-to-teen support option that can feel less intimidating. You can reach out by phone or text depending on availability. Use the website to see current hours and steps.",
-          how_to_start: ["call", "text"],
+          why: "Support from other teens who understand what it is like to struggle. You can reach out by phone, text, or email depending on what feels easiest.",
+          how_to_start: ["call", "text", "form"],
         },
         {
           title: "Childhelp Hotline",
           url: "https://www.childhelp.org/hotline/",
-          why: "Support if you are unsafe at home or dealing with abuse. The website lists ways to connect right away. You can also ask about next steps and referrals.",
-          how_to_start: ["call", "text", "referral"],
+          why: "Help if you are dealing with abuse or an unsafe home situation. They can listen, support you, and suggest safe next steps.",
+          how_to_start: ["call", "text"],
         },
       ],
     });
   }
 
-  // If they gave zero message but did pick filters, we still proceed.
-  if (!combinedUserText) {
-    return send(req, res, 400, { error: "Missing message or selections" });
-  }
-
   try {
     const resources = await loadResources(csvUrl);
 
-    // 1) Classify need and whether a single clarifying question is needed
+    // 1) Classify need and intent using chat context
     const classification = await openaiJSON(apiKey, [
       {
         role: "system",
         content:
-          'You are a precise intake assistant for a curated resource navigator for fatherless teens. Output JSON only with this exact schema: {"need_tags": string[], "urgency": "low"|"medium"|"high", "intent": "explore"|"pick_best"|"compare"|"ask_followup", "needs_clarifying_question": boolean, "clarifying_question": string, "notes": string}. Rules: need_tags must be 3-6 short tags. Only ask a clarifying question if the user message is too vague to match. If asking, write ONE short question. notes must be under 20 words. Do not give advice.',
+          'You are a precise intake assistant for a curated resource navigator for fatherless teens. Output JSON only with this exact schema: {"need_tags": string[], "urgency": "low"|"medium"|"high", "intent": "explore"|"pick_best"|"compare"|"ask_followup", "needs_clarifying_question": boolean, "clarifying_question": string, "notes": string}. Keep notes short. Do not give advice.',
       },
       ...history,
-      { role: "user", content: combinedUserText },
+      { role: "user", content: message },
     ]);
 
     const urgency = String(classification.urgency || "low").toLowerCase();
@@ -426,11 +383,8 @@ export default async function handler(req, res) {
       }
     }
 
-    const queryTokens = tokenize(combinedUserText);
-    const aiTagTokens = tokenize((classification.need_tags || []).join(" "));
-    const selectedTagTokens = tokenize(selectedTags.join(" "));
-    const goalTokens = tokenize(goal);
-    const tagTokens = [...new Set([...aiTagTokens, ...selectedTagTokens, ...goalTokens])];
+    const queryTokens = tokenize(message);
+    const tagTokens = tokenize((classification.need_tags || []).join(" "));
 
     const rankedAll = resources
       .map((r) => ({ r, s: scoreResource(r, queryTokens, tagTokens) }))
@@ -447,34 +401,33 @@ export default async function handler(req, res) {
       return send(req, res, 200, {
         mode: "no_match",
         intro:
-          "I am not seeing a strong match yet. Pick a topic above or add one detail (talk now, grief, school stress, therapy, mentor, support group).",
+          "I am not seeing a strong match yet. Add one detail about what you want, for example talking to someone, grief support, school stress, mentorship, or therapy.",
         resources: [],
       });
     }
 
-    // 2) Decide how many to show: 1–3 only
-    const limit = intent === "pick_best" || wantSinglePick(combinedUserText) ? 1 : 3;
-    const top = ranked.slice(0, 6).map((x) => ({
+    // 2) Decide how many to show based on intent and phrasing
+    const limit = intent === "pick_best" || wantSinglePick(message) ? 1 : 3;
+
+    const top = ranked.slice(0, Math.max(limit, 3)).map((x) => ({
       ...x.r,
       how_to_start_steps: deriveHowToStart(x.r),
     }));
 
-    // 3) Write final response, short and specific, and include How to start steps
+    // 3) Write final response from AI, grounded in the sheet
     const response = await openaiJSON(apiKey, [
       {
         role: "system",
         content:
-          'You are the SinePatre Resource Navigator. You MUST use ONLY the provided resources and their fields. Output JSON only: {"intro": string, "resources": [{"title": string, "url": string, "why": string, "how_to_start": string[]}]}.\nRules:\n- Return 1-3 resources only, matching show_count.\n- Each why must be exactly 3 sentences.\n- why must explain the match (based on the user message, selected topics, goal, and the resource fields) and avoid generic therapy advice.\n- Include practical next steps, and include the How to start steps as a short list in how_to_start using only: ["call","text","form","walk-in","referral"].\n- If show_count is 1, return exactly 1.\n- Keep intro to 1-2 sentences.\n',
+          'You are the SinePatre Resource Navigator. You help like a thoughtful guide, warm and direct. You MUST use ONLY the provided resources and their fields. No generic therapy advice and no medical claims. Output JSON only with this exact schema: {"intro": string, "resources": [{"title": string, "url": string, "why": string, "how_to_start": string[]}]}. Rules: If the user asks for the single best option, return exactly 1 resource. Otherwise return up to 3 resources, matching show_count. Each "why" must be exactly 3 sentences, specific to the user message and to the resource fields, and include what the teen can do next in a practical way. how_to_start must be a short list that uses only these words: "call", "text", "form", "walk-in", "referral".',
       },
       ...history,
       {
         role: "user",
         content: JSON.stringify({
-          message: message || "",
-          selected_tags: selectedTags,
-          goal,
-          age_range: ageRange,
+          message,
           urgency,
+          need_tags: classification.need_tags || [],
           intent,
           show_count: limit,
           resources: top,
@@ -491,7 +444,6 @@ export default async function handler(req, res) {
         ? r.how_to_start
             .map((s) => String(s || "").trim().toLowerCase())
             .filter((s) => ["call", "text", "form", "walk-in", "referral"].includes(s))
-            .slice(0, 5)
         : [],
     }));
 
