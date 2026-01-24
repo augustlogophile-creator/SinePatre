@@ -8,20 +8,18 @@
 // POST JSON:
 // {
 //   "message": "...",
-//   "history": [{role:"user"|"assistant", content:"..."}],
-//   "filters": {
-//     "tags": ["therapy","grief"],
-//     "goal": "I want to talk privately",
-//     "age_range": "13-15"
-//   }
+//   "history": [{ role:"user"|"assistant", content:"..." }],
+//   "selected_tags": ["talk now","therapy", ...],
+//   "goal": "I want to talk privately" | "I want community" | "I want a mentor" | "I want help coping" | "I want to explore options",
+//   "age_range": "13-15" | "16-18" | "" | etc
 // }
 //
 // Returns:
 // {
-//   mode: "recommendations"|"clarify"|"safety"|"no_match",
+//   mode: "safety" | "clarify" | "recommendations" | "no_match",
 //   intro: string,
 //   question?: string,
-//   resources: [{ title, url, summary, match, how_to_start }]
+//   resources: [{ title, url, why, how_to_start?: string[] }]
 // }
 
 const MAX_MESSAGE_LENGTH = 800;
@@ -60,8 +58,44 @@ function normalize(text) {
 
 function tokenize(text) {
   const stop = new Set([
-    "the","and","or","but","if","to","of","in","on","for","with","is","are","was","were","be","been","being",
-    "i","me","my","you","your","we","they","this","that","it","im","i'm","dont","don't","cant","can't",
+    "the",
+    "and",
+    "or",
+    "but",
+    "if",
+    "to",
+    "of",
+    "in",
+    "on",
+    "for",
+    "with",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "i",
+    "me",
+    "my",
+    "you",
+    "your",
+    "we",
+    "they",
+    "this",
+    "that",
+    "it",
+    "im",
+    "i'm",
+    "dont",
+    "don't",
+    "cant",
+    "can't",
+    "want",
+    "need",
+    "help",
+    "please",
   ]);
 
   return normalize(text)
@@ -136,7 +170,8 @@ async function loadResources(csvUrl) {
     if (col(c) === -1) throw new Error(`Missing column: ${c}`);
   }
 
-  const howToStartIdx = col("how_to_start"); // optional column
+  // Optional column support (won't break if not present)
+  const howToStartCol = col("how_to_start");
 
   return rows
     .slice(1)
@@ -148,14 +183,14 @@ async function loadResources(csvUrl) {
       when_to_use: (r2[col("when_to_use")] || "").trim(),
       not_for: (r2[col("not_for")] || "").trim(),
       fatherlessness_connection: (r2[col("fatherlessness_connection")] || "").trim(),
-      how_to_start: howToStartIdx !== -1 ? (r2[howToStartIdx] || "").trim() : "",
       url: (r2[col("url")] || "").trim(),
+      how_to_start: howToStartCol !== -1 ? (r2[howToStartCol] || "").trim() : "",
     }))
     .filter((x) => x.id && x.title && x.url);
 }
 
 function isCrisisResource(resource) {
-  const t = `${resource.title} ${resource.description} ${resource.when_to_use} ${resource.best_for}`.toLowerCase();
+  const t = `${resource.title} ${resource.description} ${resource.when_to_use}`.toLowerCase();
   return (
     t.includes("crisis") ||
     t.includes("suicide") ||
@@ -163,36 +198,6 @@ function isCrisisResource(resource) {
     t.includes("hotline") ||
     t.includes("988")
   );
-}
-
-function scoreResource(resource, queryTokens, tagTokens) {
-  const haystack = tokenize(
-    `${resource.title} ${resource.description} ${resource.best_for} ${resource.fatherlessness_connection} ${resource.when_to_use} ${resource.not_for} ${resource.how_to_start || ""}`
-  );
-
-  let score = 0;
-  for (const w of haystack) {
-    if (queryTokens.includes(w)) score += 3;
-    if (tagTokens.includes(w)) score += 5;
-  }
-
-  const fatherText = (resource.fatherlessness_connection || "").toLowerCase();
-  if (fatherText.includes("father") || fatherText.includes("dad") || fatherText.includes("fatherless")) {
-    score += 4;
-  }
-
-  return score;
-}
-
-function sanitizeHistory(history) {
-  if (!Array.isArray(history)) return [];
-  const trimmed = history
-    .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
-    .map((m) => ({
-      role: m.role,
-      content: String(m.content).slice(0, 800),
-    }));
-  return trimmed.slice(-MAX_HISTORY_ITEMS);
 }
 
 function wantSinglePick(message) {
@@ -207,6 +212,87 @@ function wantSinglePick(message) {
     t.includes("best one") ||
     t.includes("the best option")
   );
+}
+
+function sanitizeHistory(history) {
+  if (!Array.isArray(history)) return [];
+  const trimmed = history
+    .filter(
+      (m) =>
+        m &&
+        (m.role === "user" || m.role === "assistant") &&
+        typeof m.content === "string"
+    )
+    .map((m) => ({
+      role: m.role,
+      content: String(m.content).slice(0, 800),
+    }));
+  return trimmed.slice(-MAX_HISTORY_ITEMS);
+}
+
+function normalizeTagList(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((s) => String(s || "").trim())
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function deriveHowToStart(resource) {
+  // Prefer explicit sheet column if present
+  const raw = String(resource.how_to_start || "").trim();
+  if (raw) {
+    return raw
+      .split(/[,;|]/g)
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+      .slice(0, 5);
+  }
+
+  // Otherwise infer from text (always from this fixed set)
+  const text = `${resource.title} ${resource.description} ${resource.when_to_use} ${resource.best_for}`.toLowerCase();
+  const steps = [];
+  const add = (s) => {
+    if (!steps.includes(s)) steps.push(s);
+  };
+
+  // Look for hints, but always output from allowed set:
+  // call, text, form, walk-in, referral
+  if (/\btext\b|\bsms\b|\bchat\b/.test(text)) add("text");
+  if (/\bcall\b|\bphone\b|\bhotline\b/.test(text)) add("call");
+  if (/\bapply\b|\bapplication\b|\bintake form\b|\bform\b|\bsign up\b/.test(text))
+    add("form");
+  if (/\bwalk[- ]?in\b|\bin person\b|\bclinic\b/.test(text)) add("walk-in");
+  if (/\breferral\b|\breferred\b|\bparent\b|\bschool counselor\b/.test(text))
+    add("referral");
+
+  // If still empty, default to "form" (most universal for links)
+  if (!steps.length) steps.push("form");
+
+  return steps.slice(0, 5);
+}
+
+function scoreResource(resource, queryTokens, tagTokens) {
+  const haystack = tokenize(
+    `${resource.title} ${resource.description} ${resource.best_for} ${resource.fatherlessness_connection} ${resource.when_to_use} ${resource.not_for}`
+  );
+
+  let score = 0;
+  for (const w of haystack) {
+    if (queryTokens.includes(w)) score += 3;
+    if (tagTokens.includes(w)) score += 5;
+  }
+
+  const fatherText = (resource.fatherlessness_connection || "").toLowerCase();
+  if (
+    fatherText.includes("father") ||
+    fatherText.includes("dad") ||
+    fatherText.includes("fatherless")
+  ) {
+    score += 4;
+  }
+
+  return score;
 }
 
 // OpenAI call: returns JSON object
@@ -234,34 +320,6 @@ async function openaiJSON(apiKey, messages) {
   return JSON.parse(j.choices[0].message.content);
 }
 
-function normalizeFilters(filters) {
-  const f = filters && typeof filters === "object" ? filters : {};
-  const tags = Array.isArray(f.tags) ? f.tags.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 8) : [];
-  const goal = typeof f.goal === "string" ? f.goal.trim().slice(0, 80) : "";
-  const age_range = typeof f.age_range === "string" ? f.age_range.trim().slice(0, 40) : "";
-  return { tags, goal, age_range };
-}
-
-function isMissingCoreContext(message, filters) {
-  const t = normalize(message);
-  const hasMeaningfulText = t.split(" ").filter(Boolean).length >= 3;
-
-  const hasTags = (filters.tags || []).length > 0;
-  const hasGoal = Boolean(filters.goal);
-  const hasAge = Boolean(filters.age_range);
-
-  // If they typed basically nothing AND chose nothing, we need 1 clarifying question.
-  if (!hasMeaningfulText && !hasTags && !hasGoal && !hasAge) return true;
-
-  // If they typed "help" or "idk" and no tags, also clarify.
-  const tooVague =
-    (t === "help" || t === "idk" || t === "i dont know" || t === "i don't know" || t === "hey" || t === "hi") &&
-    !hasTags &&
-    !hasGoal;
-
-  return tooVague;
-}
-
 export default async function handler(req, res) {
   setCors(req, res);
 
@@ -282,90 +340,97 @@ export default async function handler(req, res) {
   }
 
   const message = String(req.body?.message || "").trim();
-  if (!message) return send(req, res, 400, { error: "Missing message" });
-  if (message.length > MAX_MESSAGE_LENGTH) return send(req, res, 400, { error: "Message too long" });
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    return send(req, res, 400, { error: "Message too long" });
+  }
 
   const history = sanitizeHistory(req.body?.history);
-  const filters = normalizeFilters(req.body?.filters);
+  const selectedTags = normalizeTagList(req.body?.selected_tags);
+  const goal = String(req.body?.goal || "").trim().slice(0, 80);
+  const ageRange = String(req.body?.age_range || "").trim().slice(0, 40);
 
-  if (triggeredSafety(message)) {
+  const combinedUserText = [
+    message,
+    selectedTags.length ? `Selected topics: ${selectedTags.join(", ")}.` : "",
+    goal ? `Goal: ${goal}.` : "",
+    ageRange ? `Age range: ${ageRange}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  // Hard safety gate: skip AI, return crisis resources only
+  if (triggeredSafety(combinedUserText)) {
     return send(req, res, 200, {
       mode: "safety",
-      intro: "You deserve immediate support. Please use one of these right now.",
+      intro: "You deserve immediate support right now. Please use one of these options.",
       resources: [
         {
           title: "988 Suicide & Crisis Lifeline",
           url: "https://988lifeline.org",
-          summary: "24/7 call or text support in the U.S.",
-          match: "If you are in danger or feel like you might hurt yourself, this is the fastest place to start. You can call or text 988 to reach trained counselors any time. If you cannot stay safe right now, call your local emergency number.",
-          how_to_start: "Call or text 988. If you are in immediate danger, call 911.",
+          why: "Available 24/7 in the U.S. You can call or text 988 to reach trained counselors who can help in the moment. If you are in immediate danger, call local emergency services.",
+          how_to_start: ["call", "text"],
         },
         {
           title: "Crisis Text Line",
           url: "https://www.crisistextline.org",
-          summary: "Text-based support with trained counselors.",
-          match: "If talking out loud feels hard, text support can be easier and more private. A trained counselor can help you slow things down and make a safe plan for the next hour. This is a good option if you want to stay on your phone and not make a call.",
-          how_to_start: "Use the Crisis Text Line website to start a text conversation (instructions vary by country).",
+          why: "Text-based support with trained counselors. This is helpful if speaking out loud feels hard. The site explains the exact steps to start.",
+          how_to_start: ["text", "form"],
         },
         {
           title: "Teen Line",
           url: "https://teenline.org",
-          summary: "Teens helping teens via text, call, or email.",
-          match: "If you want someone closer to your age who gets what being a teen feels like, Teen Line can help. It can feel less intense than adult-led options while still being real support. This is a strong fit when you want to talk without being judged.",
-          how_to_start: "Visit TeenLine.org and choose phone, text, or email options listed there.",
+          why: "A teen-to-teen support option that can feel less intimidating. You can reach out by phone or text depending on availability. Use the website to see current hours and steps.",
+          how_to_start: ["call", "text"],
+        },
+        {
+          title: "Childhelp Hotline",
+          url: "https://www.childhelp.org/hotline/",
+          why: "Support if you are unsafe at home or dealing with abuse. The website lists ways to connect right away. You can also ask about next steps and referrals.",
+          how_to_start: ["call", "text", "referral"],
         },
       ],
     });
   }
 
-  // One clarifying question only if needed.
-  if (isMissingCoreContext(message, filters)) {
-    return send(req, res, 200, {
-      mode: "clarify",
-      intro: "I can help, I just need one quick detail first.",
-      question:
-        "Which of these fits best right now: talk now, therapy, support group, mentor, grief, or school stress? If you want, add your age range too.",
-      resources: [],
-    });
+  // If they gave zero message but did pick filters, we still proceed.
+  if (!combinedUserText) {
+    return send(req, res, 400, { error: "Missing message or selections" });
   }
 
   try {
     const resources = await loadResources(csvUrl);
 
-    // 1) Intake: map message + UI filters into need tags and urgency
+    // 1) Classify need and whether a single clarifying question is needed
     const classification = await openaiJSON(apiKey, [
       {
         role: "system",
         content:
-          "You are a precise intake assistant for a curated resource navigator for fatherless teens. Output JSON only as: { need_tags: string[3-8], urgency: low|medium|high, intent: one of [explore, pick_best, compare, ask_followup], should_ask_one_question: boolean, one_question: string, notes: string }. Use the user's UI filters (tags/goal/age_range) as strong signals. Keep notes short. Do not give advice.",
+          'You are a precise intake assistant for a curated resource navigator for fatherless teens. Output JSON only with this exact schema: {"need_tags": string[], "urgency": "low"|"medium"|"high", "intent": "explore"|"pick_best"|"compare"|"ask_followup", "needs_clarifying_question": boolean, "clarifying_question": string, "notes": string}. Rules: need_tags must be 3-6 short tags. Only ask a clarifying question if the user message is too vague to match. If asking, write ONE short question. notes must be under 20 words. Do not give advice.',
       },
       ...history,
-      {
-        role: "user",
-        content: JSON.stringify({
-          message,
-          filters,
-        }),
-      },
+      { role: "user", content: combinedUserText },
     ]);
 
     const urgency = String(classification.urgency || "low").toLowerCase();
-    const intent = String(classification.intent || "").toLowerCase();
-    const shouldAsk = Boolean(classification.should_ask_one_question);
-    const oneQuestion = typeof classification.one_question === "string" ? classification.one_question.trim() : "";
+    const intent = String(classification.intent || "explore").toLowerCase();
 
-    // If the model thinks we should ask 1 question, do it only if the question is actually useful.
-    if (shouldAsk && oneQuestion && oneQuestion.length <= 160) {
-      return send(req, res, 200, {
-        mode: "clarify",
-        intro: "One quick question so I can match you correctly.",
-        question: oneQuestion,
-        resources: [],
-      });
+    if (classification.needs_clarifying_question) {
+      const q = String(classification.clarifying_question || "").trim();
+      if (q) {
+        return send(req, res, 200, {
+          mode: "clarify",
+          intro: "One quick question so I can match you well.",
+          question: q,
+          resources: [],
+        });
+      }
     }
 
-    const queryTokens = tokenize(message);
-    const tagTokens = tokenize([...(classification.need_tags || []), ...(filters.tags || []), filters.goal || "", filters.age_range || ""].join(" "));
+    const queryTokens = tokenize(combinedUserText);
+    const aiTagTokens = tokenize((classification.need_tags || []).join(" "));
+    const selectedTagTokens = tokenize(selectedTags.join(" "));
+    const goalTokens = tokenize(goal);
+    const tagTokens = [...new Set([...aiTagTokens, ...selectedTagTokens, ...goalTokens])];
 
     const rankedAll = resources
       .map((r) => ({ r, s: scoreResource(r, queryTokens, tagTokens) }))
@@ -382,34 +447,37 @@ export default async function handler(req, res) {
       return send(req, res, 200, {
         mode: "no_match",
         intro:
-          "I am not seeing a strong match yet. Pick a category above (therapy, mentor, grief, talk now) or add one detail about what you want next.",
+          "I am not seeing a strong match yet. Pick a topic above or add one detail (talk now, grief, school stress, therapy, mentor, support group).",
         resources: [],
       });
     }
 
-    const single = intent === "pick_best" || wantSinglePick(message);
-    const limit = single ? 1 : 3;
+    // 2) Decide how many to show: 1–3 only
+    const limit = intent === "pick_best" || wantSinglePick(combinedUserText) ? 1 : 3;
+    const top = ranked.slice(0, 6).map((x) => ({
+      ...x.r,
+      how_to_start_steps: deriveHowToStart(x.r),
+    }));
 
-    // Give the writer a few candidates, even if we only show 1.
-    const candidates = ranked.slice(0, 5).map((x) => x.r);
-
-    // 2) Write response grounded in curated DB
+    // 3) Write final response, short and specific, and include How to start steps
     const response = await openaiJSON(apiKey, [
       {
         role: "system",
         content:
-          "You are the SinePatre Resource Navigator. Be warm and direct. You MUST use ONLY the provided resources and their fields. No generic therapy advice, no medical claims. Output JSON only as: { intro: string, resources: [{ title: string, url: string, summary: string, match: string, how_to_start: string }] }.\n\nRules:\n- If the user asks for the single best option, return exactly 1 resource. Otherwise return 1 to 3.\n- summary must be 1 sentence.\n- match must be exactly 3 sentences, explaining why it fits THIS teen based on their message and filters.\n- how_to_start must be concrete steps (call, text, form, walk-in, referral, website). If the resource has a how_to_start field, use it. Otherwise infer steps only from the resource fields and URL.\n- Keep intro to 1 to 2 sentences.\n- Do not mention that you used a database, CSV, or internal tools.",
+          'You are the SinePatre Resource Navigator. You MUST use ONLY the provided resources and their fields. Output JSON only: {"intro": string, "resources": [{"title": string, "url": string, "why": string, "how_to_start": string[]}]}.\nRules:\n- Return 1-3 resources only, matching show_count.\n- Each why must be exactly 3 sentences.\n- why must explain the match (based on the user message, selected topics, goal, and the resource fields) and avoid generic therapy advice.\n- Include practical next steps, and include the How to start steps as a short list in how_to_start using only: ["call","text","form","walk-in","referral"].\n- If show_count is 1, return exactly 1.\n- Keep intro to 1-2 sentences.\n',
       },
       ...history,
       {
         role: "user",
         content: JSON.stringify({
-          message,
-          filters,
+          message: message || "",
+          selected_tags: selectedTags,
+          goal,
+          age_range: ageRange,
           urgency,
           intent,
           show_count: limit,
-          resources: candidates,
+          resources: top,
         }),
       },
     ]);
@@ -418,14 +486,18 @@ export default async function handler(req, res) {
     const clipped = outResources.slice(0, limit).map((r) => ({
       title: String(r.title || "").trim(),
       url: String(r.url || "").trim(),
-      summary: String(r.summary || "").trim(),
-      match: String(r.match || "").trim(),
-      how_to_start: String(r.how_to_start || "").trim(),
-    })).filter((x) => x.title && x.url);
+      why: String(r.why || "").trim(),
+      how_to_start: Array.isArray(r.how_to_start)
+        ? r.how_to_start
+            .map((s) => String(s || "").trim().toLowerCase())
+            .filter((s) => ["call", "text", "form", "walk-in", "referral"].includes(s))
+            .slice(0, 5)
+        : [],
+    }));
 
     return send(req, res, 200, {
       mode: "recommendations",
-      intro: (response.intro || "Here is what fits best based on what you shared.").trim(),
+      intro: response.intro || "Here is what fits best based on what you shared.",
       resources: clipped,
     });
   } catch (err) {
@@ -434,7 +506,8 @@ export default async function handler(req, res) {
     if (msg.includes("insufficient_quota")) {
       return send(req, res, 402, {
         error: "OpenAI billing not active",
-        detail: "Your API key has no available quota. Confirm billing is enabled and you have remaining credits.",
+        detail:
+          "Your API key has no available quota. Confirm billing is enabled and you have remaining credits.",
       });
     }
 
