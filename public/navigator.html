@@ -1,285 +1,269 @@
 // public/navigator.js
+
 (() => {
-  const $ = (id) => document.getElementById(id);
+  const messagesEl = document.getElementById("messages");
+  const inputEl = document.getElementById("input");
+  const sendBtn = document.getElementById("sendBtn");
+  const ageEl = document.getElementById("age");
+  const clearBtn = document.getElementById("clearBtn");
 
-  const messagesEl = $("messages");
-  const inputEl = $("input");
-  const sendBtn = $("send");
-  const ageInput = $("ageInput");
+  const infoBtn = document.getElementById("infoBtn");
+  const infoModal = document.getElementById("infoModal");
+  const closeInfo = document.getElementById("closeInfo");
 
-  const infoBtn = $("infoBtn");
-  const modalOverlay = $("modalOverlay");
-  const closeModal = $("closeModal");
-  const modalBody = $("modalBody");
-
+  /** @type {{role:"user"|"assistant", content:string}[]} */
   let history = [];
 
-  function nowHHMM() {
+  function nowStamp() {
     const d = new Date();
-    const hh = String(d.getHours()).padStart(2, "0");
-    const mm = String(d.getMinutes()).padStart(2, "0");
-    return `${hh}:${mm}`;
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
 
-  function openInfo() {
-    modalBody.innerHTML = `
-      <p>
-        This navigator is built for teens who are growing up without a father or with a father
-        who is emotionally absent. It does not search the whole internet. Instead, it draws
-        only from a curated database of programs, hotlines, therapy options, and peer spaces
-        that have been reviewed in advance.
-      </p>
-      <p>
-        The AI does one job: it reads your message, compares it to the database, and suggests a
-        few options that seem like the best fit for what you described. It explains why each
-        match makes sense and names concrete first steps, such as calling, texting, filling out
-        a short form, or asking for a referral.
-      </p>
-      <p>
-        The navigator is not a crisis service and cannot see your identity. If you are in
-        immediate danger or thinking about harming yourself, call or text <strong>988</strong>
-        or local emergency services instead of relying on this tool.
-      </p>
-      <p>
-        To see more about how resources are chosen, you can read
-        <a href="https://sinepatre.com/how-we-choose-resources" target="_blank" rel="noreferrer">
-          How we choose resources
-        </a>
-        on the main SinePatre site.
-      </p>
-    `;
-    modalOverlay.classList.add("open");
+  function autoGrow(el) {
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 140) + "px";
   }
 
-  function closeInfo() {
-    modalOverlay.classList.remove("open");
+  function escapeText(s) {
+    const div = document.createElement("div");
+    div.textContent = String(s ?? "");
+    return div.innerHTML;
   }
 
-  infoBtn.addEventListener("click", openInfo);
-  closeModal.addEventListener("click", closeInfo);
-  modalOverlay.addEventListener("click", (e) => {
-    if (e.target === modalOverlay) closeInfo();
-  });
-
-  function addMessage(role, text, extraNode) {
+  function addMessage(role, content, opts = {}) {
     const row = document.createElement("div");
     row.className = `msgRow ${role}`;
 
     const bubble = document.createElement("div");
-    bubble.className = `bubble ${role}`;
+    bubble.className = `bubble ${role === "user" ? "user" : ""}`;
 
     const meta = document.createElement("div");
     meta.className = "meta";
-    meta.textContent = `${role === "user" ? "You" : "Navigator"} · ${nowHHMM()}`;
 
-    const content = document.createElement("div");
-    content.textContent = text;
+    const who = document.createElement("span");
+    who.textContent = role === "user" ? "You" : "Navigator";
+
+    const time = document.createElement("span");
+    time.textContent = opts.time || nowStamp();
+
+    meta.appendChild(who);
+    meta.appendChild(time);
+
+    const body = document.createElement("div");
+    body.className = "content";
+    body.textContent = content;
 
     bubble.appendChild(meta);
-    bubble.appendChild(content);
-
-    if (extraNode) bubble.appendChild(extraNode);
+    bubble.appendChild(body);
 
     row.appendChild(bubble);
     messagesEl.appendChild(row);
-
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
-  function makeCards(resources) {
-    const wrap = document.createElement("div");
-    wrap.className = "cards";
+  function addResourceCards(resources) {
+    if (!Array.isArray(resources) || !resources.length) return;
+
+    const row = document.createElement("div");
+    row.className = "msgRow assistant";
+
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    const who = document.createElement("span");
+    who.textContent = "Matches";
+    const time = document.createElement("span");
+    time.textContent = nowStamp();
+    meta.appendChild(who);
+    meta.appendChild(time);
+
+    const cards = document.createElement("div");
+    cards.className = "cards";
 
     resources.forEach((r) => {
       const card = document.createElement("div");
       card.className = "card";
 
-      const top = document.createElement("div");
-      top.className = "cardTop";
+      const titleRow = document.createElement("div");
+      titleRow.className = "cardTitle";
 
-      const title = document.createElement("p");
-      title.className = "cardTitle";
-      title.textContent = r.title || "Resource";
+      const a = document.createElement("a");
+      a.href = r.url;
+      a.target = "_blank";
+      a.rel = "noreferrer";
+      a.textContent = r.title;
 
-      const link = document.createElement("a");
-      link.className = "cardLink";
-      link.href = r.url;
-      link.target = "_blank";
-      link.rel = "noreferrer";
-      link.textContent = "Open";
+      titleRow.appendChild(a);
 
-      top.appendChild(title);
-      top.appendChild(link);
-
-      const why = document.createElement("div");
-      why.className = "cardWhy";
-
-      const full = String(r.why || "").trim();
-      const short = full.length > 220 ? `${full.slice(0, 220).trim()}…` : full;
-
-      const textNode = document.createElement("div");
-      textNode.textContent = short;
-      why.appendChild(textNode);
-
-      if (full.length > 220) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "showMoreBtn";
-        btn.textContent = "Show more";
-        let expanded = false;
-
-        btn.addEventListener("click", () => {
-          expanded = !expanded;
-          textNode.textContent = expanded ? full : short;
-          btn.textContent = expanded ? "Show less" : "Show more";
-        });
-
-        why.appendChild(btn);
-      }
+      const how = document.createElement("div");
+      how.className = "howToStart";
 
       const steps = Array.isArray(r.how_to_start) ? r.how_to_start : [];
-      if (steps.length) {
-        const pills = document.createElement("div");
-        pills.className = "howToStart";
+      steps.slice(0, 4).forEach((s) => {
+        const pill = document.createElement("span");
+        pill.className = "pill";
+        pill.textContent = s;
+        how.appendChild(pill);
+      });
 
-        steps.slice(0, 5).forEach((s) => {
-          const pill = document.createElement("span");
-          pill.className = "stepPill";
-          pill.textContent = `How to start: ${s}`;
-          pills.appendChild(pill);
+      const why = document.createElement("div");
+      why.className = "why";
+
+      const full = String(r.why || "").trim();
+      const short = full.length > 240 ? full.slice(0, 240).trimEnd() + "…" : full;
+
+      const textSpan = document.createElement("span");
+      textSpan.innerHTML = escapeText(short);
+
+      const moreRow = document.createElement("div");
+      moreRow.className = "moreRow";
+
+      if (full.length > 240) {
+        const btn = document.createElement("button");
+        btn.className = "linkBtn";
+        btn.type = "button";
+        btn.textContent = "Show more";
+
+        let expanded = false;
+        btn.addEventListener("click", () => {
+          expanded = !expanded;
+          btn.textContent = expanded ? "Show less" : "Show more";
+          textSpan.innerHTML = escapeText(expanded ? full : short);
         });
 
-        card.appendChild(top);
-        card.appendChild(why);
-        card.appendChild(pills);
-      } else {
-        card.appendChild(top);
-        card.appendChild(why);
+        moreRow.appendChild(btn);
       }
 
-      wrap.appendChild(card);
+      why.appendChild(textSpan);
+
+      card.appendChild(titleRow);
+      if (steps.length) card.appendChild(how);
+      card.appendChild(why);
+      if (moreRow.childNodes.length) card.appendChild(moreRow);
+
+      cards.appendChild(card);
     });
 
-    return wrap;
+    bubble.appendChild(meta);
+    bubble.appendChild(cards);
+    row.appendChild(bubble);
+
+    messagesEl.appendChild(row);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
-  function setSending(isSending) {
-    sendBtn.disabled = isSending;
-    inputEl.disabled = isSending;
+  function setBusy(b) {
+    sendBtn.disabled = b;
+    inputEl.disabled = b;
+    ageEl.disabled = b;
+    clearBtn.disabled = b;
   }
 
-  async function sendMessage() {
-    const raw = String(inputEl.value || "").trim();
-    const age = String(ageInput.value || "").trim();
+  function openInfo() {
+    infoModal.classList.add("open");
+  }
+  function closeInfoModal() {
+    infoModal.classList.remove("open");
+  }
 
-    if (!raw) return;
+  async function send() {
+    const msg = inputEl.value.trim();
+    if (!msg) return;
 
-    // What user sees
-    addMessage("user", raw);
-
-    // What API sees
-    const messageForApi = age ? `Age range: ${age}. ${raw}` : raw;
-    history.push({ role: "user", content: messageForApi });
+    addMessage("user", msg);
+    history.push({ role: "user", content: msg });
 
     inputEl.value = "";
-    inputEl.style.height = "auto";
-
-    setSending(true);
+    autoGrow(inputEl);
+    setBusy(true);
 
     try {
-      const response = await fetch("/api/navigate", {
+      const res = await fetch("/api/navigate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: messageForApi,
+          message: msg,
           history,
+          age: ageEl.value.trim(),
+          topics: [],
         }),
       });
 
-      const data = await response.json();
+      const data = await res.json().catch(() => ({}));
 
-      if (data.mode === "clarify" && data.question) {
-        const text = `${data.intro || ""}\n\n${data.question}`;
-        addMessage("assistant", text.trim());
-        history.push({ role: "assistant", content: text.trim() });
+      if (data && data.mode === "safety") {
+        addMessage("assistant", data.intro || "Please use one of these resources now.");
+        history.push({ role: "assistant", content: data.intro || "" });
+        addResourceCards(data.resources || []);
+        setBusy(false);
+        inputEl.focus();
         return;
       }
 
-      if (data.mode === "safety") {
-        const cards = makeCards(data.resources || []);
-        addMessage(
-          "assistant",
-          data.intro || "You deserve immediate support. Please use one of these options.",
-          cards
-        );
-        history.push({
-          role: "assistant",
-          content: data.intro || "Safety resources shared.",
-        });
+      if (data && data.mode === "recommendations") {
+        if (data.intro) {
+          addMessage("assistant", data.intro);
+          history.push({ role: "assistant", content: data.intro });
+        }
+
+        if (data.clarifying_question) {
+          addMessage("assistant", data.clarifying_question);
+          history.push({ role: "assistant", content: data.clarifying_question });
+        }
+
+        addResourceCards(data.resources || []);
+        setBusy(false);
+        inputEl.focus();
         return;
       }
 
-      if (data.mode === "no_match") {
-        addMessage(
-          "assistant",
-          data.intro ||
-            "I am not seeing a strong match yet. Add one more detail so I can refine the search."
-        );
-        history.push({
-          role: "assistant",
-          content:
-            data.intro ||
-            "No strong match yet. Asked the user for a bit more detail.",
-        });
+      if (data && data.mode === "no_match") {
+        addMessage("assistant", data.intro || "Tell me one more detail so I can narrow it down.");
+        history.push({ role: "assistant", content: data.intro || "" });
+        setBusy(false);
+        inputEl.focus();
         return;
       }
 
-      const intro = data.intro || "Here is what fits best based on what you shared.";
-      const resources = Array.isArray(data.resources) ? data.resources : [];
-
-      if (!resources.length) {
-        addMessage("assistant", intro);
-        history.push({ role: "assistant", content: intro });
-        return;
-      }
-
-      const cards = makeCards(resources);
-      addMessage("assistant", intro, cards);
-      history.push({ role: "assistant", content: intro });
-    } catch (e) {
-      addMessage(
-        "assistant",
-        "Something went wrong while loading matches. Try again in a moment."
-      );
-      history.push({
-        role: "assistant",
-        content: "Error while calling the navigator.",
-      });
-    } finally {
-      setSending(false);
+      addMessage("assistant", "Something went wrong. Please try again.");
+      setBusy(false);
+      inputEl.focus();
+    } catch {
+      addMessage("assistant", "Something went wrong. Please try again.");
+      setBusy(false);
+      inputEl.focus();
     }
   }
 
-  // Autosize textarea
-  inputEl.addEventListener("input", () => {
-    inputEl.style.height = "auto";
-    inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + "px";
-  });
+  function clearChat() {
+    messagesEl.innerHTML = "";
+    history = [];
+    inputEl.value = "";
+    autoGrow(inputEl);
+    inputEl.focus();
+  }
 
+  // Events
+  inputEl.addEventListener("input", () => autoGrow(inputEl));
   inputEl.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      void sendMessage();
+      send();
     }
   });
 
-  sendBtn.addEventListener("click", () => {
-    void sendMessage();
+  sendBtn.addEventListener("click", send);
+  clearBtn.addEventListener("click", clearChat);
+
+  infoBtn.addEventListener("click", openInfo);
+  closeInfo.addEventListener("click", closeInfoModal);
+  infoModal.addEventListener("click", (e) => {
+    if (e.target === infoModal) closeInfoModal();
   });
 
-  // Opening line from the navigator
-  const introText =
-    "Tell me what is happening and what you would like next. I will suggest one to three options and explain how to begin with each.";
-  addMessage("assistant", introText);
-  history.push({ role: "assistant", content: introText });
+  // Init
+  autoGrow(inputEl);
+  inputEl.focus();
 })();
