@@ -1,452 +1,325 @@
-<!-- navigator.html (same aesthetics as index.html) -->
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>SinePatre Resource Navigator</title>
+// public/navigator.js
+(() => {
+  const TOPICS = [
+    "talk now",
+    "therapy",
+    "support group",
+    "mentor",
+    "grief",
+    "school stress",
+    "anxiety",
+    "depression",
+    "family",
+    "identity",
+  ];
 
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&display=swap');
+  const $ = (id) => document.getElementById(id);
 
-    :root{
-      --bg: #0f0f10;
-      --text: rgba(255,255,255,0.92);
-      --muted: rgba(255,255,255,0.68);
-      --muted2: rgba(255,255,255,0.52);
+  const messagesEl = $("messages");
+  const inputEl = $("input");
+  const sendBtn = $("send");
+  const goalSelect = $("goalSelect");
+  const ageInput = $("ageInput");
 
-      --navy: #1f2f5a;
-      --navyHover: #263a70;
+  const infoBtn = $("infoBtn");
+  const howBtn = $("howBtn");
+  const modalOverlay = $("modalOverlay");
+  const closeModal = $("closeModal");
+  const modalTitle = $("modalTitle");
+  const modalBody = $("modalBody");
 
-      --inputBorder: rgba(255,255,255,0.10);
-      --userBubbleBg: rgba(255,255,255,0.12);
-      --userBubbleBorder: rgba(255,255,255,0.14);
-    }
+  let selectedTags = new Set();
+  let history = [];
 
-    *{ box-sizing: border-box; }
-    html, body { height: 100%; }
+  function nowHHMM() {
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${hh}:${mm}`;
+  }
 
-    body{
-      margin: 0;
-      font-family: 'EB Garamond', Georgia, serif;
-      background:
-        radial-gradient(1200px 800px at 70% -10%, rgba(255,255,255,0.08), transparent 55%),
-        radial-gradient(900px 650px at -10% 115%, rgba(255,255,255,0.06), transparent 60%),
-        var(--bg);
-      color: var(--text);
-      letter-spacing: -0.01em;
-    }
+  function openModal(title, html) {
+    modalTitle.textContent = title;
+    modalBody.innerHTML = html;
+    modalOverlay.classList.add("open");
+  }
 
-    .page{
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
+  function closeModalFn() {
+    modalOverlay.classList.remove("open");
+  }
 
-    .top{
-      width: min(980px, 100%);
-      margin: 0 auto;
-      padding: 46px 20px 0;
-      text-align: center;
-    }
+  closeModal.addEventListener("click", closeModalFn);
+  modalOverlay.addEventListener("click", (e) => {
+    if (e.target === modalOverlay) closeModalFn();
+  });
 
-    .chip{
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      color: var(--muted2);
-      font-size: 14px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      margin-bottom: 14px;
-    }
+  infoBtn.addEventListener("click", () => {
+    openModal(
+      "Info",
+      `
+        <p>
+          This tool matches you to a curated list of resources for fatherless teens.
+          It only recommends items from that database.
+        </p>
+        <p>
+          If you are in immediate danger or thinking about harming yourself, call or text <strong>988</strong>.
+        </p>
+      `
+    );
+  });
 
-    .mark{
-      width: 18px;
-      height: 18px;
-      display: inline-block;
-    }
-    .mark svg{
-      width: 18px;
-      height: 18px;
-      display: block;
-      stroke: var(--navy);
-      fill: none;
-      stroke-width: 2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
+  howBtn.addEventListener("click", () => {
+    openModal(
+      "How we choose resources",
+      `
+        <p>
+          We include resources that are reputable, teen-appropriate, and clear about how to start.
+          We prioritize options that are safe, specific, and practical to access.
+        </p>
+        <p>
+          <a href="https://sinepatre.com/how-we-choose-resources" target="_blank" rel="noreferrer">
+            Read more
+          </a>
+        </p>
+      `
+    );
+  });
 
-    h1{
-      margin: 0 0 12px;
-      font-weight: 500;
-      font-size: clamp(40px, 6.2vw, 64px);
-      line-height: 1.04;
-      letter-spacing: -0.03em;
-    }
+  function addMessage(role, text, extraNode) {
+    const row = document.createElement("div");
+    row.className = `msgRow ${role}`;
 
-    .desc{
-      margin: 0 auto;
-      max-width: 860px;
-      color: var(--muted);
-      font-size: 18px;
-      line-height: 1.62;
-    }
+    const bubble = document.createElement("div");
+    bubble.className = `bubble ${role}`;
 
-    .desc strong{ color: rgba(255,255,255,0.90); font-weight: 700; }
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = `${role === "user" ? "You" : "Navigator"} · ${nowHHMM()}`;
 
-    .messages{
-      width: min(980px, 100%);
-      margin: 0 auto;
-      padding: 26px 20px 160px;
-      flex: 1;
-    }
+    const content = document.createElement("div");
+    content.textContent = text;
 
-    .msgRow{ display: flex; margin: 18px 0; }
-    .msgRow.user{ justify-content: flex-end; }
-    .msgRow.assistant{ justify-content: flex-start; }
+    bubble.appendChild(meta);
+    bubble.appendChild(content);
 
-    .userBubble{
-      max-width: min(560px, 92%);
-      background: var(--userBubbleBg);
-      border: 1px solid var(--userBubbleBorder);
-      border-radius: 18px;
-      padding: 10px 14px;
-      font-size: 16px;
-      line-height: 1.55;
-      color: rgba(255,255,255,0.92);
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
+    if (extraNode) bubble.appendChild(extraNode);
 
-    .assistantBlock{
-      max-width: min(760px, 96%);
-      font-size: 16px;
-      line-height: 1.62;
-      color: rgba(255,255,255,0.92);
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
+    row.appendChild(bubble);
+    messagesEl.appendChild(row);
 
-    .assistantMeta{
-      color: var(--muted2);
-      font-size: 14px;
-      margin-bottom: 8px;
-    }
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
 
-    .composerWrap{
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      padding: 18px 0 26px;
-      background: rgba(15,15,16,0.92);
-      backdrop-filter: blur(10px);
-      border-top: 1px solid rgba(255,255,255,0.06);
-    }
+  function makeCards(resources) {
+    const wrap = document.createElement("div");
+    wrap.className = "cards";
 
-    .composer{
-      width: min(980px, 100%);
-      margin: 0 auto;
-      padding: 0 20px;
-    }
+    resources.forEach((r) => {
+      const card = document.createElement("div");
+      card.className = "card";
 
-    .bar{
-      display: grid;
-      grid-template-columns: 1fr auto auto;
-      gap: 12px;
-      align-items: end;
-      border-radius: 22px;
-      border: 1px solid var(--inputBorder);
-      background: rgba(255,255,255,0.05);
-      padding: 12px 12px;
-    }
+      const top = document.createElement("div");
+      top.className = "cardTop";
 
-    textarea{
-      width: 100%;
-      border: 0;
-      outline: none;
-      background: transparent;
-      color: var(--text);
-      font-family: 'EB Garamond', Georgia, serif;
-      font-size: 17px;
-      line-height: 1.45;
-      resize: none;
-      min-height: 28px;
-      max-height: 160px;
-      overflow: auto;
-      padding: 6px 8px;
-    }
+      const title = document.createElement("p");
+      title.className = "cardTitle";
+      title.textContent = r.title || "Resource";
 
-    textarea::placeholder{ color: rgba(255,255,255,0.48); }
+      const link = document.createElement("a");
+      link.className = "cardLink";
+      link.href = r.url;
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      link.textContent = "Open";
 
-    .btn{
-      width: 42px;
-      height: 42px;
-      border-radius: 14px;
-      border: 1px solid rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.05);
-      color: rgba(255,255,255,0.92);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: background 150ms ease, transform 150ms ease, border-color 150ms ease, opacity 150ms ease;
-      position: relative;
-      user-select: none;
-    }
+      top.appendChild(title);
+      top.appendChild(link);
 
-    .btn:hover{
-      transform: translateY(-1px);
-      background: rgba(255,255,255,0.08);
-      border-color: rgba(255,255,255,0.16);
-    }
+      const why = document.createElement("div");
+      why.className = "cardWhy";
 
-    .btn.primary{
-      background: var(--navy);
-      border-color: rgba(255,255,255,0.10);
-    }
-    .btn.primary:hover{ background: var(--navyHover); }
+      const full = String(r.why || "").trim();
+      const short = full.length > 220 ? `${full.slice(0, 220).trim()}…` : full;
 
-    .btn:disabled{ opacity: 0.55; cursor: not-allowed; transform: none; }
+      const whyText = document.createElement("div");
+      whyText.textContent = short;
 
-    .btn svg{
-      width: 18px;
-      height: 18px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
+      why.appendChild(whyText);
 
-    .btn[data-tip]::after{
-      content: attr(data-tip);
-      position: absolute;
-      bottom: 54px;
-      right: 0;
-      background: rgba(10,10,11,0.92);
-      color: rgba(255,255,255,0.92);
-      border: 1px solid rgba(255,255,255,0.14);
-      padding: 8px 10px;
-      border-radius: 10px;
-      font-size: 13px;
-      line-height: 1.2;
-      white-space: nowrap;
-      opacity: 0;
-      transform: translateY(6px);
-      pointer-events: none;
-      transition: opacity 140ms ease, transform 140ms ease;
-      box-shadow: 0 16px 40px rgba(0,0,0,0.35);
-    }
-    .btn[data-tip]:hover::after{ opacity: 1; transform: translateY(0); }
+      if (full.length > 220) {
+        const btn = document.createElement("button");
+        btn.className = "showMoreBtn";
+        btn.type = "button";
+        btn.textContent = "Show more";
+        let expanded = false;
 
-    .tip{
-      width: min(980px, 100%);
-      margin: 10px auto 0;
-      padding: 0 20px;
-      color: var(--muted2);
-      font-size: 14px;
-      text-align: center;
-      line-height: 1.45;
-    }
-  </style>
-</head>
-
-<body>
-  <div class="page">
-    <header class="top">
-      <div class="chip">
-        <span class="mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24">
-            <path d="M12 2v6"></path>
-            <path d="M12 16v6"></path>
-            <path d="M2 12h6"></path>
-            <path d="M16 12h6"></path>
-            <circle cx="12" cy="12" r="2.3"></circle>
-          </svg>
-        </span>
-        SinePatre
-      </div>
-
-      <h1>Resource Navigator</h1>
-
-      <p class="desc">
-        A private guide built on a curated database of vetted support options for fatherless teens.
-        Share what is happening, what you want next, and what feels realistic right now.
-        You will receive high-fit recommendations with clear reasoning and practical next steps.
-        If you are in immediate danger or thinking about harming yourself, call or text <strong>988</strong>.
-      </p>
-    </header>
-
-    <main id="messages" class="messages" aria-live="polite" aria-label="Chat messages"></main>
-
-    <div class="composerWrap">
-      <div class="composer">
-        <div class="bar" role="group" aria-label="Message composer">
-          <textarea id="input" placeholder="What do you want help with?" rows="1"></textarea>
-
-          <button id="newChat" class="btn" type="button" data-tip="Start new chat" aria-label="Start new chat">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 5v14"></path>
-              <path d="M5 12h14"></path>
-            </svg>
-          </button>
-
-          <button id="send" class="btn primary" type="button" data-tip="Send" aria-label="Send">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M5 12h13"></path>
-              <path d="M13 5l7 7-7 7"></path>
-            </svg>
-          </button>
-        </div>
-
-        <div class="tip">
-          Tip: Include one concrete detail, for example “someone to talk to,” “grief,” “anger,” “school stress,” or “mentorship.”
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    const messagesEl = document.getElementById("messages");
-    const inputEl = document.getElementById("input");
-    const sendBtn = document.getElementById("send");
-    const newChatBtn = document.getElementById("newChat");
-
-    let history = [];
-
-    function autoGrow(el){
-      el.style.height = "auto";
-      el.style.height = Math.min(el.scrollHeight, 160) + "px";
-    }
-
-    function setBusy(b){
-      sendBtn.disabled = b;
-      newChatBtn.disabled = b;
-    }
-
-    function clearChat(){
-      messagesEl.innerHTML = "";
-      history = [];
-      inputEl.value = "";
-      autoGrow(inputEl);
-      inputEl.focus();
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-
-    function addUser(text){
-      const row = document.createElement("div");
-      row.className = "msgRow user";
-
-      const bubble = document.createElement("div");
-      bubble.className = "userBubble";
-      bubble.textContent = text;
-
-      row.appendChild(bubble);
-      messagesEl.appendChild(row);
-    }
-
-    function addAssistant(text, { isTyping = false } = {}){
-      const row = document.createElement("div");
-      row.className = "msgRow assistant";
-
-      const block = document.createElement("div");
-      block.className = "assistantBlock";
-
-      const meta = document.createElement("div");
-      meta.className = "assistantMeta";
-      meta.textContent = "Navigator";
-
-      const content = document.createElement("div");
-      content.textContent = text;
-
-      block.appendChild(meta);
-      block.appendChild(content);
-
-      row.appendChild(block);
-      messagesEl.appendChild(row);
-      return row;
-    }
-
-    function formatReply(data){
-      const intro = data?.intro ? String(data.intro).trim() : "";
-      const resources = Array.isArray(data?.resources) ? data.resources : [];
-
-      const lines = [];
-      if (intro) lines.push(intro);
-
-      if (resources.length){
-        lines.push("");
-        resources.forEach((r, i) => {
-          const title = (r.title || "Resource").trim();
-          const url = (r.url || "").trim();
-          const why = (r.why || "").trim();
-
-          lines.push(`${i + 1}. ${title}${url ? " - " + url : ""}`);
-          if (why) lines.push(why);
-          lines.push("");
-        });
-      }
-
-      return lines.join("\n").trim();
-    }
-
-    async function send(){
-      const message = (inputEl.value || "").trim();
-      if (!message) return;
-
-      addUser(message);
-      history.push({ role: "user", content: message });
-
-      inputEl.value = "";
-      autoGrow(inputEl);
-      setBusy(true);
-
-      const typingRow = addAssistant("Thinking...", { isTyping: true });
-
-      try{
-        const res = await fetch("/api/navigate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message, history })
+        btn.addEventListener("click", () => {
+          expanded = !expanded;
+          whyText.textContent = expanded ? full : short;
+          btn.textContent = expanded ? "Show less" : "Show more";
         });
 
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok){
-          throw new Error(data?.error || data?.detail || "Request failed");
-        }
-
-        typingRow.remove();
-
-        const reply = formatReply(data) || "I did not receive a usable reply. Please try again.";
-        addAssistant(reply);
-        history.push({ role: "assistant", content: reply });
-
-        window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-      } catch (e){
-        typingRow.remove();
-        const msg = "I could not load recommendations right now. Please try again in a moment.";
-        addAssistant(msg);
-        history.push({ role: "assistant", content: msg });
-      } finally {
-        setBusy(false);
-        inputEl.focus();
+        why.appendChild(btn);
       }
-    }
 
-    sendBtn.addEventListener("click", send);
-    newChatBtn.addEventListener("click", clearChat);
-    inputEl.addEventListener("input", () => autoGrow(inputEl));
+      const steps = Array.isArray(r.how_to_start) ? r.how_to_start : [];
+      if (steps.length) {
+        const pills = document.createElement("div");
+        pills.className = "howToStart";
 
-    inputEl.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey){
-        e.preventDefault();
-        send();
+        steps.slice(0, 5).forEach((s) => {
+          const pill = document.createElement("span");
+          pill.className = "stepPill";
+          pill.textContent = `How to start: ${s}`;
+          pills.appendChild(pill);
+        });
+
+        card.appendChild(top);
+        card.appendChild(why);
+        card.appendChild(pills);
+      } else {
+        card.appendChild(top);
+        card.appendChild(why);
       }
+
+      wrap.appendChild(card);
     });
 
-    inputEl.focus();
-  </script>
-</body>
-</html>
+    return wrap;
+  }
+
+  function setSending(isSending) {
+    sendBtn.disabled = isSending;
+    inputEl.disabled = isSending;
+  }
+
+  function currentSelections() {
+    const goal = String(goalSelect.value || "").trim();
+    const age_range = String(ageInput.value || "").trim();
+    return {
+      selected_tags: Array.from(selectedTags),
+      goal,
+      age_range,
+    };
+  }
+
+  async function sendMessage() {
+    const text = String(inputEl.value || "").trim();
+    const { selected_tags, goal, age_range } = currentSelections();
+
+    if (!text && selected_tags.length === 0 && !goal && !age_range) return;
+
+    if (text) {
+      addMessage("user", text);
+      history.push({ role: "user", content: text });
+    } else {
+      addMessage("user", `Selected topics: ${selected_tags.join(", ") || "none"}`);
+      history.push({
+        role: "user",
+        content: `Selected topics: ${selected_tags.join(", ") || "none"}. Goal: ${goal || "n/a"}. Age range: ${
+          age_range || "n/a"
+        }.`,
+      });
+    }
+
+    inputEl.value = "";
+    inputEl.style.height = "auto";
+
+    setSending(true);
+
+    try {
+      const r = await fetch("/api/navigate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          history,
+          selected_tags,
+          goal,
+          age_range,
+        }),
+      });
+
+      const data = await r.json();
+
+      if (data.mode === "clarify" && data.question) {
+        addMessage("assistant", `${data.intro}\n\n${data.question}`);
+        history.push({ role: "assistant", content: `${data.intro}\n\n${data.question}` });
+        return;
+      }
+
+      if (data.mode === "safety") {
+        const cards = makeCards(data.resources || []);
+        addMessage("assistant", data.intro || "Please use one of these resources now.", cards);
+        history.push({ role: "assistant", content: data.intro || "Safety resources provided." });
+        return;
+      }
+
+      if (data.mode === "no_match") {
+        addMessage("assistant", data.intro || "Add one detail so I can match you.");
+        history.push({ role: "assistant", content: data.intro || "No match." });
+        return;
+      }
+
+      const intro = data.intro || "Here is what fits best.";
+      const resources = Array.isArray(data.resources) ? data.resources : [];
+
+      if (!resources.length) {
+        addMessage("assistant", intro);
+        history.push({ role: "assistant", content: intro });
+        return;
+      }
+
+      const cards = makeCards(resources);
+      addMessage("assistant", intro, cards);
+      history.push({ role: "assistant", content: intro });
+    } catch (e) {
+      addMessage("assistant", "Something went wrong. Please try again.");
+      history.push({ role: "assistant", content: "Something went wrong." });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  // Autosize textarea
+  inputEl.addEventListener("input", () => {
+    inputEl.style.height = "auto";
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 160) + "px";
+  });
+
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void sendMessage();
+    }
+  });
+
+  sendBtn.addEventListener("click", () => void sendMessage());
+
+  // Topic chips
+  document.querySelectorAll(".chip[data-tag]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tag = String(btn.getAttribute("data-tag") || "").trim().toLowerCase();
+      if (!TOPICS.includes(tag)) return;
+
+      if (selectedTags.has(tag)) {
+        selectedTags.delete(tag);
+        btn.classList.remove("active");
+      } else {
+        selectedTags.add(tag);
+        btn.classList.add("active");
+      }
+    });
+  });
+
+  // First message
+  addMessage(
+    "assistant",
+    "Pick a topic above, then tell me what is going on. I will return 1 to 3 best-fit options and exactly how to start."
+  );
+  history.push({
+    role: "assistant",
+    content:
+      "Pick a topic above, then tell me what is going on. I will return 1 to 3 best-fit options and exactly how to start.",
+  });
+})();
