@@ -1,34 +1,17 @@
 // public/navigator.js
 (() => {
-  const TOPICS = [
-    "talk now",
-    "therapy",
-    "support group",
-    "mentor",
-    "grief",
-    "school stress",
-    "anxiety",
-    "depression",
-    "family",
-    "identity",
-  ];
-
   const $ = (id) => document.getElementById(id);
 
   const messagesEl = $("messages");
   const inputEl = $("input");
   const sendBtn = $("send");
-  const goalSelect = $("goalSelect");
   const ageInput = $("ageInput");
 
   const infoBtn = $("infoBtn");
-  const howBtn = $("howBtn");
   const modalOverlay = $("modalOverlay");
   const closeModal = $("closeModal");
-  const modalTitle = $("modalTitle");
   const modalBody = $("modalBody");
 
-  let selectedTags = new Set();
   let history = [];
 
   function nowHHMM() {
@@ -38,51 +21,44 @@
     return `${hh}:${mm}`;
   }
 
-  function openModal(title, html) {
-    modalTitle.textContent = title;
-    modalBody.innerHTML = html;
+  function openInfo() {
+    modalBody.innerHTML = `
+      <p>
+        This navigator is built for teens who are growing up without a father or with a father
+        who is emotionally absent. It does not search the whole internet. Instead, it draws
+        only from a curated database of programs, hotlines, therapy options, and peer spaces
+        that have been reviewed in advance.
+      </p>
+      <p>
+        The AI does one job: it reads your message, compares it to the database, and suggests a
+        few options that seem like the best fit for what you described. It explains why each
+        match makes sense and names concrete first steps, such as calling, texting, filling out
+        a short form, or asking for a referral.
+      </p>
+      <p>
+        The navigator is not a crisis service and cannot see your identity. If you are in
+        immediate danger or thinking about harming yourself, call or text <strong>988</strong>
+        or local emergency services instead of relying on this tool.
+      </p>
+      <p>
+        To see more about how resources are chosen, you can read
+        <a href="https://sinepatre.com/how-we-choose-resources" target="_blank" rel="noreferrer">
+          How we choose resources
+        </a>
+        on the main SinePatre site.
+      </p>
+    `;
     modalOverlay.classList.add("open");
   }
 
-  function closeModalFn() {
+  function closeInfo() {
     modalOverlay.classList.remove("open");
   }
 
-  closeModal.addEventListener("click", closeModalFn);
+  infoBtn.addEventListener("click", openInfo);
+  closeModal.addEventListener("click", closeInfo);
   modalOverlay.addEventListener("click", (e) => {
-    if (e.target === modalOverlay) closeModalFn();
-  });
-
-  infoBtn.addEventListener("click", () => {
-    openModal(
-      "Info",
-      `
-        <p>
-          This tool matches you to a curated list of resources for fatherless teens.
-          It only recommends items from that database.
-        </p>
-        <p>
-          If you are in immediate danger or thinking about harming yourself, call or text <strong>988</strong>.
-        </p>
-      `
-    );
-  });
-
-  howBtn.addEventListener("click", () => {
-    openModal(
-      "How we choose resources",
-      `
-        <p>
-          We include resources that are reputable, teen-appropriate, and clear about how to start.
-          We prioritize options that are safe, specific, and practical to access.
-        </p>
-        <p>
-          <a href="https://sinepatre.com/how-we-choose-resources" target="_blank" rel="noreferrer">
-            Read more
-          </a>
-        </p>
-      `
-    );
+    if (e.target === modalOverlay) closeInfo();
   });
 
   function addMessage(role, text, extraNode) {
@@ -141,21 +117,20 @@
       const full = String(r.why || "").trim();
       const short = full.length > 220 ? `${full.slice(0, 220).trim()}…` : full;
 
-      const whyText = document.createElement("div");
-      whyText.textContent = short;
-
-      why.appendChild(whyText);
+      const textNode = document.createElement("div");
+      textNode.textContent = short;
+      why.appendChild(textNode);
 
       if (full.length > 220) {
         const btn = document.createElement("button");
-        btn.className = "showMoreBtn";
         btn.type = "button";
+        btn.className = "showMoreBtn";
         btn.textContent = "Show more";
         let expanded = false;
 
         btn.addEventListener("click", () => {
           expanded = !expanded;
-          whyText.textContent = expanded ? full : short;
+          textNode.textContent = expanded ? full : short;
           btn.textContent = expanded ? "Show less" : "Show more";
         });
 
@@ -193,34 +168,18 @@
     inputEl.disabled = isSending;
   }
 
-  function currentSelections() {
-    const goal = String(goalSelect.value || "").trim();
-    const age_range = String(ageInput.value || "").trim();
-    return {
-      selected_tags: Array.from(selectedTags),
-      goal,
-      age_range,
-    };
-  }
-
   async function sendMessage() {
-    const text = String(inputEl.value || "").trim();
-    const { selected_tags, goal, age_range } = currentSelections();
+    const raw = String(inputEl.value || "").trim();
+    const age = String(ageInput.value || "").trim();
 
-    if (!text && selected_tags.length === 0 && !goal && !age_range) return;
+    if (!raw) return;
 
-    if (text) {
-      addMessage("user", text);
-      history.push({ role: "user", content: text });
-    } else {
-      addMessage("user", `Selected topics: ${selected_tags.join(", ") || "none"}`);
-      history.push({
-        role: "user",
-        content: `Selected topics: ${selected_tags.join(", ") || "none"}. Goal: ${goal || "n/a"}. Age range: ${
-          age_range || "n/a"
-        }.`,
-      });
-    }
+    // What user sees
+    addMessage("user", raw);
+
+    // What API sees
+    const messageForApi = age ? `Age range: ${age}. ${raw}` : raw;
+    history.push({ role: "user", content: messageForApi });
 
     inputEl.value = "";
     inputEl.style.height = "auto";
@@ -228,40 +187,54 @@
     setSending(true);
 
     try {
-      const r = await fetch("/api/navigate", {
+      const response = await fetch("/api/navigate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: text,
+          message: messageForApi,
           history,
-          selected_tags,
-          goal,
-          age_range,
         }),
       });
 
-      const data = await r.json();
+      const data = await response.json();
 
       if (data.mode === "clarify" && data.question) {
-        addMessage("assistant", `${data.intro}\n\n${data.question}`);
-        history.push({ role: "assistant", content: `${data.intro}\n\n${data.question}` });
+        const text = `${data.intro || ""}\n\n${data.question}`;
+        addMessage("assistant", text.trim());
+        history.push({ role: "assistant", content: text.trim() });
         return;
       }
 
       if (data.mode === "safety") {
         const cards = makeCards(data.resources || []);
-        addMessage("assistant", data.intro || "Please use one of these resources now.", cards);
-        history.push({ role: "assistant", content: data.intro || "Safety resources provided." });
+        addMessage(
+          "assistant",
+          data.intro || "You deserve immediate support. Please use one of these options.",
+          cards
+        );
+        history.push({
+          role: "assistant",
+          content: data.intro || "Safety resources shared.",
+        });
         return;
       }
 
       if (data.mode === "no_match") {
-        addMessage("assistant", data.intro || "Add one detail so I can match you.");
-        history.push({ role: "assistant", content: data.intro || "No match." });
+        addMessage(
+          "assistant",
+          data.intro ||
+            "I am not seeing a strong match yet. Add one more detail so I can refine the search."
+        );
+        history.push({
+          role: "assistant",
+          content:
+            data.intro ||
+            "No strong match yet. Asked the user for a bit more detail.",
+        });
         return;
       }
 
-      const intro = data.intro || "Here is what fits best.";
+      const intro = data.intro || "Here is what fits best based on what you shared.";
       const resources = Array.isArray(data.resources) ? data.resources : [];
 
       if (!resources.length) {
@@ -274,8 +247,14 @@
       addMessage("assistant", intro, cards);
       history.push({ role: "assistant", content: intro });
     } catch (e) {
-      addMessage("assistant", "Something went wrong. Please try again.");
-      history.push({ role: "assistant", content: "Something went wrong." });
+      addMessage(
+        "assistant",
+        "Something went wrong while loading matches. Try again in a moment."
+      );
+      history.push({
+        role: "assistant",
+        content: "Error while calling the navigator.",
+      });
     } finally {
       setSending(false);
     }
@@ -284,7 +263,7 @@
   // Autosize textarea
   inputEl.addEventListener("input", () => {
     inputEl.style.height = "auto";
-    inputEl.style.height = Math.min(inputEl.scrollHeight, 160) + "px";
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + "px";
   });
 
   inputEl.addEventListener("keydown", (e) => {
@@ -294,32 +273,13 @@
     }
   });
 
-  sendBtn.addEventListener("click", () => void sendMessage());
-
-  // Topic chips
-  document.querySelectorAll(".chip[data-tag]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const tag = String(btn.getAttribute("data-tag") || "").trim().toLowerCase();
-      if (!TOPICS.includes(tag)) return;
-
-      if (selectedTags.has(tag)) {
-        selectedTags.delete(tag);
-        btn.classList.remove("active");
-      } else {
-        selectedTags.add(tag);
-        btn.classList.add("active");
-      }
-    });
+  sendBtn.addEventListener("click", () => {
+    void sendMessage();
   });
 
-  // First message
-  addMessage(
-    "assistant",
-    "Pick a topic above, then tell me what is going on. I will return 1 to 3 best-fit options and exactly how to start."
-  );
-  history.push({
-    role: "assistant",
-    content:
-      "Pick a topic above, then tell me what is going on. I will return 1 to 3 best-fit options and exactly how to start.",
-  });
+  // Opening line from the navigator
+  const introText =
+    "Tell me what is happening and what you would like next. I will suggest one to three options and explain how to begin with each.";
+  addMessage("assistant", introText);
+  history.push({ role: "assistant", content: introText });
 })();
