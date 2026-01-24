@@ -1,4 +1,3 @@
-<!-- public/index.html -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -6,351 +5,160 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SinePatre — Resource Navigator</title>
   <style>
-    @import url("https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&display=swap");
+    @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&display=swap');
 
-    :root{
-      --bg: #f6f7fb;
-      --card: #ffffff;
-      --text: #0f172a;
-      --muted: rgba(15, 23, 42, 0.64);
-      --border: rgba(15, 23, 42, 0.10);
-      --shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
-
-      --accent: #1f3a7a;
-      --accentHover: #172f63;
-
-      --dangerBg: rgba(185, 28, 28, 0.08);
-      --dangerBorder: rgba(185, 28, 28, 0.22);
-      --dangerText: #b91c1c;
+    :root {
+      --bg-dark: #242424;
+      --text-primary: #ffffff;
+      --text-secondary: #a0a0a0;
+      --accent-blue: #2d4a8f;
+      --accent-blue-hover: #223861;
+      --border-soft: rgba(255,255,255,0.08);
     }
 
-    *{ box-sizing: border-box; }
-    html, body{ height: 100%; }
-    body{
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
       margin: 0;
-      font-family: "EB Garamond", Georgia, serif;
-      color: var(--text);
-      background:
-        radial-gradient(1200px 700px at 70% -20%, rgba(31,58,122,0.09), transparent 55%),
-        radial-gradient(900px 650px at -10% 120%, rgba(31,58,122,0.07), transparent 60%),
-        var(--bg);
-    }
-
-    .topbar{
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      background: rgba(246, 247, 251, 0.82);
-      backdrop-filter: blur(10px);
-      border-bottom: 1px solid rgba(15, 23, 42, 0.06);
-    }
-
-    .topbarInner{
-      width: min(980px, 100%);
-      margin: 0 auto;
-      padding: 14px 18px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .brand{
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-width: 200px;
-    }
-
-    .brand small{
-      letter-spacing: 0.10em;
-      text-transform: uppercase;
-      color: rgba(15, 23, 42, 0.55);
-      font-size: 12px;
-    }
-    .brand strong{
-      font-size: 16px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-    }
-
-    .topActions{
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .btn{
-      border: 1px solid var(--border);
-      background: #fff;
-      color: var(--text);
-      padding: 9px 12px;
-      border-radius: 12px;
-      font-size: 14px;
-      cursor: pointer;
-      transition: background 140ms ease, transform 140ms ease, border-color 140ms ease;
-      user-select: none;
-      font-family: "EB Garamond", Georgia, serif;
-    }
-    .btn:hover{ background: rgba(15, 23, 42, 0.03); transform: translateY(-1px); }
-    .btn.primary{
-      background: var(--accent);
-      border-color: rgba(31, 58, 122, 0.18);
-      color: #fff;
-    }
-    .btn.primary:hover{ background: var(--accentHover); }
-    .btn.danger{
-      background: var(--dangerBg);
-      border-color: var(--dangerBorder);
-      color: var(--dangerText);
-      font-weight: 600;
-    }
-
-    .wrap{
-      width: min(980px, 100%);
-      margin: 0 auto;
-      padding: 26px 18px 120px;
-    }
-
-    .hero{
-      background: var(--card);
-      border: 1px solid rgba(15, 23, 42, 0.08);
-      border-radius: 18px;
-      box-shadow: var(--shadow);
-      padding: 20px 18px;
-    }
-
-    .heroTop{
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 14px;
-      flex-wrap: wrap;
-    }
-
-    h1{
-      margin: 0;
-      font-size: 28px;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      line-height: 1.1;
-    }
-
-    .oneLine{
-      margin: 6px 0 0 0;
-      color: var(--muted);
-      font-size: 15px;
-      line-height: 1.5;
-      max-width: 720px;
-    }
-
-    .controls{
-      margin-top: 14px;
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 12px;
-      align-items: end;
-    }
-
-    .field{
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      text-align: left;
-    }
-
-    label{
-      font-size: 13px;
-      color: rgba(15, 23, 42, 0.62);
-    }
-
-    input{
-      border: 1px solid rgba(15, 23, 42, 0.12);
-      border-radius: 14px;
-      padding: 10px 12px;
-      font-size: 15px;
-      background: #fff;
-      outline: none;
-      font-family: "EB Garamond", Georgia, serif;
-    }
-    input:focus{
-      border-color: rgba(31, 58, 122, 0.38);
-      box-shadow: 0 0 0 3px rgba(31, 58, 122, 0.10);
-    }
-
-    .messages{
-      margin-top: 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-
-    .msgRow{
-      display: flex;
-      gap: 10px;
-    }
-    .msgRow.user{ justify-content: flex-end; }
-    .msgRow.assistant{ justify-content: flex-start; }
-
-    .bubble{
-      max-width: min(760px, 96%);
-      border-radius: 16px;
-      border: 1px solid rgba(15, 23, 42, 0.10);
-      padding: 10px 12px;
-      background: #fff;
-      box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
-    }
-    .bubble.user{
-      background: rgba(31, 58, 122, 0.10);
-      border-color: rgba(31, 58, 122, 0.18);
-    }
-
-    .meta{
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      font-size: 12px;
-      color: rgba(15, 23, 42, 0.55);
-      margin-bottom: 6px;
-    }
-
-    .content{
-      font-size: 15px;
-      line-height: 1.55;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
-
-    .cards{
-      margin-top: 10px;
-      display: grid;
-      gap: 10px;
-    }
-
-    .card{
-      border: 1px solid rgba(15, 23, 42, 0.10);
-      border-radius: 16px;
-      padding: 12px 12px;
-      background: #fff;
-    }
-
-    .cardTitle{
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    .cardTitle a{
-      color: var(--accent);
-      text-decoration: none;
-      font-weight: 700;
-      font-size: 16px;
-    }
-    .cardTitle a:hover{ text-decoration: underline; }
-
-    .howToStart{
-      margin-top: 8px;
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .pill{
-      border: 1px solid rgba(15, 23, 42, 0.12);
-      border-radius: 999px;
-      padding: 6px 10px;
-      font-size: 13px;
-      color: rgba(15, 23, 42, 0.80);
-      background: rgba(15, 23, 42, 0.02);
-    }
-
-    .why{
-      margin-top: 8px;
-      color: rgba(15, 23, 42, 0.86);
-      font-size: 14px;
-      line-height: 1.55;
-      white-space: pre-wrap;
-    }
-
-    .moreRow{
-      margin-top: 8px;
-      display: flex;
-      justify-content: flex-end;
-    }
-    .linkBtn{
-      border: 0;
-      background: transparent;
-      color: rgba(31, 58, 122, 0.92);
-      cursor: pointer;
-      font-size: 14px;
-      font-family: "EB Garamond", Georgia, serif;
       padding: 0;
     }
-    .linkBtn:hover{ text-decoration: underline; }
 
-    .composerWrap{
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(246, 247, 251, 0.90);
-      backdrop-filter: blur(10px);
-      border-top: 1px solid rgba(15, 23, 42, 0.08);
-      padding: 14px 0 18px;
+    body {
+      font-family: 'EB Garamond', Georgia, serif;
+      background: var(--bg-dark);
+      color: var(--text-primary);
+      letter-spacing: -0.005em;
+      line-height: 1.6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
     }
 
-    .composer{
-      width: min(980px, 100%);
-      margin: 0 auto;
-      padding: 0 18px;
+    .container {
+      width: 100%;
+      max-width: 820px;
+      padding: 48px 24px;
+      text-align: center;
+    }
+
+    .header {
+      margin-bottom: 48px;
+    }
+
+    .title-with-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 7px;
+      background: var(--accent-blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: 600;
+    }
+
+    h1 {
+      margin: 0;
+      font-weight: 500;
+      font-size: clamp(40px, 6vw, 56px);
+      line-height: 1.1;
+      letter-spacing: -0.015em;
+      color: var(--text-primary);
+    }
+
+    .description {
+      margin: 20px 0 0 0;
+      color: var(--text-secondary);
+      font-size: 15px;
+      line-height: 1.8;
+      max-width: 680px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .composer-wrap {
+      width: 100%;
+    }
+
+    .input-bar {
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 10px;
-      align-items: end;
+      align-items: center;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border-soft);
+      border-radius: 20px;
+      padding: 13px 16px;
+      transition: all 0.2s ease;
     }
 
-    textarea{
+    .input-bar:focus-within {
+      border-color: rgba(45, 74, 143, 0.4);
+      background: rgba(255,255,255,0.06);
+    }
+
+    textarea {
       width: 100%;
-      border: 1px solid rgba(15, 23, 42, 0.12);
-      border-radius: 16px;
-      padding: 12px 12px;
-      font-size: 15px;
+      border: none;
+      outline: none;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 16px;
       line-height: 1.5;
       resize: none;
-      min-height: 46px;
-      max-height: 140px;
-      font-family: "EB Garamond", Georgia, serif;
-      outline: none;
-      background: #fff;
+      min-height: 22px;
+      max-height: 100px;
+      padding: 4px 0;
+      font-weight: 400;
     }
-    textarea:focus{
-      border-color: rgba(31, 58, 122, 0.38);
-      box-shadow: 0 0 0 3px rgba(31, 58, 122, 0.10);
-    }
-    textarea::placeholder{ color: rgba(15, 23, 42, 0.48); }
 
-    .sendBtn{
-      width: 46px;
-      height: 46px;
-      border-radius: 14px;
-      border: 1px solid rgba(31, 58, 122, 0.18);
-      background: var(--accent);
-      color: #fff;
-      cursor: pointer;
-      transition: transform 140ms ease, background 140ms ease;
-      display: inline-flex;
+    textarea::placeholder {
+      color: var(--text-secondary);
+      font-weight: 400;
+    }
+
+    .btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 9px;
+      border: 1px solid var(--border-soft);
+      background: var(--accent-blue);
+      color: white;
+      display: flex;
       align-items: center;
       justify-content: center;
-      user-select: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+      padding: 0;
     }
-    .sendBtn:hover{ transform: translateY(-1px); background: var(--accentHover); }
-    .sendBtn:disabled{ opacity: 0.55; cursor: not-allowed; transform: none; }
 
-    .sendBtn svg{
-      width: 18px;
-      height: 18px;
+    .btn:hover:not(:disabled) {
+      background: var(--accent-blue-hover);
+      border-color: rgba(45, 74, 143, 0.5);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn svg {
+      width: 16px;
+      height: 16px;
       stroke: currentColor;
       stroke-width: 2.2;
       fill: none;
@@ -358,117 +166,325 @@
       stroke-linejoin: round;
     }
 
-    /* Modal */
-    .modalOverlay{
-      position: fixed;
-      inset: 0;
-      background: rgba(15, 23, 42, 0.36);
+    .messages {
       display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 18px;
-      z-index: 50;
+      flex-direction: column;
+      gap: 14px;
+      margin-top: 36px;
+      max-height: 450px;
+      overflow-y: auto;
     }
-    .modalOverlay.open{ display: flex; }
 
-    .modal{
-      width: min(760px, 100%);
-      border-radius: 18px;
-      background: #fff;
-      border: 1px solid rgba(15, 23, 42, 0.10);
-      box-shadow: 0 22px 70px rgba(15, 23, 42, 0.18);
-      padding: 18px 18px 16px;
-    }
-    .modalHeader{
+    .messages.active {
       display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-    .modalHeader strong{
-      font-size: 18px;
-      letter-spacing: -0.01em;
-    }
-    .closeBtn{
-      border: 1px solid rgba(15, 23, 42, 0.12);
-      background: #fff;
-      border-radius: 12px;
-      padding: 8px 10px;
-      cursor: pointer;
-      font-family: "EB Garamond", Georgia, serif;
-    }
-    .modalBody{
-      color: rgba(15, 23, 42, 0.84);
-      font-size: 15px;
-      line-height: 1.65;
     }
 
-    @media (max-width: 700px){
-      .controls{ grid-template-columns: 1fr; }
-      .brand{ min-width: 0; }
+    .msg-row {
+      display: flex;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    .msg-row.user {
+      justify-content: flex-end;
+    }
+
+    .msg-row.assistant {
+      justify-content: flex-start;
+    }
+
+    @keyframes slideIn {
+      from { 
+        opacity: 0; 
+        transform: translateY(4px); 
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0); 
+      }
+    }
+
+    .bubble {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: 520px;
+    }
+
+    .msg-text {
+      padding: 11px 15px;
+      border-radius: 14px;
+      font-size: 15px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .msg-text.user {
+      background: var(--accent-blue);
+      color: white;
+    }
+
+    .msg-text.assistant {
+      background: rgba(255,255,255,0.06);
+      color: var(--text-primary);
+    }
+
+    .resources-block {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .resource-card {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border-soft);
+      border-radius: 12px;
+      padding: 12px;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .resource-card:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(45, 74, 143, 0.3);
+    }
+
+    .resource-title {
+      font-weight: 600;
+      color: var(--accent-blue);
+      margin-bottom: 8px;
+      text-decoration: none;
+    }
+
+    .resource-title:hover {
+      text-decoration: underline;
+    }
+
+    .resource-why {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 8px;
+    }
+
+    .resource-steps {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .step-pill {
+      background: rgba(45, 74, 143, 0.2);
+      color: var(--accent-blue);
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 13px;
+    }
+
+    @media (max-width: 640px) {
+      h1 { 
+        font-size: 36px; 
+      }
+      .container {
+        padding: 32px 16px;
+      }
+    }
+
+    ::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.08);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255,255,255,0.12);
     }
   </style>
 </head>
 <body>
-  <div class="topbar">
-    <div class="topbarInner">
-      <div class="brand">
-        <small>SinePatre</small>
-        <strong>Resource Navigator</strong>
+  <div class="container">
+    <div class="header">
+      <div class="title-with-icon">
+        <div class="icon">SP</div>
+        <h1>SinePatre</h1>
       </div>
-      <div class="topActions">
-        <button id="infoBtn" class="btn">Info</button>
-        <a class="btn danger" href="https://988lifeline.org" target="_blank" rel="noreferrer">Need help now</a>
+      <p class="description">
+        A private guide designed for fatherless teens seeking support. Curated from a vetted database of resources, SinePatre listens to your situation and delivers personalized recommendations grounded in real organizations and practical next steps. Whether you're navigating grief, seeking mentorship, managing school stress, or processing identity questions, you'll find pathways forward that fit your life.
+      </p>
+    </div>
+
+    <div class="composer-wrap">
+      <div class="input-bar" role="group" aria-label="Message composer">
+        <textarea
+          id="input"
+          placeholder="What do you need help with?"
+          rows="1"
+          autocomplete="off"
+          spellcheck="true"
+        ></textarea>
+        <button id="send-btn" class="btn" title="Send message">
+          <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
       </div>
     </div>
+
+    <main id="messages" class="messages" aria-live="polite" aria-label="Chat messages"></main>
   </div>
 
-  <div class="wrap">
-    <section class="hero" aria-label="Navigator header">
-      <div class="heroTop">
-        <div>
-          <h1>Resource Navigator</h1>
-          <p class="oneLine">Tell me what you want help with, I will return 1 to 3 best fit options with clear next steps.</p>
-        </div>
-      </div>
+  <script>
+    const messagesEl = document.getElementById('messages');
+    const inputEl = document.getElementById('input');
+    const sendBtn = document.getElementById('send-btn');
 
-      <div class="controls" aria-label="Intake controls">
-        <div class="field">
-          <label for="age">Age range (optional)</label>
-          <input id="age" inputmode="numeric" placeholder="Example: 13, 14-16, 17" />
-        </div>
-        <div class="field">
-          <label>&nbsp;</label>
-          <button id="clearBtn" class="btn">Clear chat</button>
-        </div>
-      </div>
+    let history = [];
 
-      <div id="messages" class="messages" aria-live="polite" aria-label="Chat messages"></div>
-    </section>
-  </div>
+    function autoGrowTextarea() {
+      inputEl.style.height = 'auto';
+      inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px';
+    }
 
-  <div class="composerWrap">
-    <div class="composer" role="group" aria-label="Message composer">
-      <textarea id="input" placeholder="What do you need help with?" rows="1"></textarea>
-      <button id="sendBtn" class="sendBtn" title="Send" aria-label="Send">
-        <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </button>
-    </div>
-  </div>
+    function addMessage(role, content) {
+      messagesEl.classList.add('active');
+      
+      const row = document.createElement('div');
+      row.className = `msg-row ${role}`;
+      
+      const bubble = document.createElement('div');
+      bubble.className = `bubble ${role}`;
+      
+      const text = document.createElement('div');
+      text.className = `msg-text ${role}`;
+      text.textContent = content;
+      
+      bubble.appendChild(text);
+      row.appendChild(bubble);
+      messagesEl.appendChild(row);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
 
-  <div id="infoModal" class="modalOverlay" role="dialog" aria-modal="true" aria-label="About this tool">
-    <div class="modal">
-      <div class="modalHeader">
-        <strong>About SinePatre Resource Navigator</strong>
-        <button id="closeInfo" class="closeBtn">Close</button>
-      </div>
-      <div class="modalBody">
-        This tool is built for fatherless teens who want practical support options that feel realistic in everyday life. The recommendations come from a curated database that is maintained ahead of time, not from browsing the internet in real time. When you write a message, the assistant uses your words to match you to resources in that database and explains the fit in plain language, with clear next steps. If you are in immediate danger or thinking about harming yourself, use the “Need help now” button to reach 988.
-      </div>
-    </div>
-  </div>
+    function addResources(resources) {
+      if (!Array.isArray(resources) || resources.length === 0) return;
 
-  <script src="/navigator.js"></script>
+      const row = document.createElement('div');
+      row.className = 'msg-row assistant';
+      
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      
+      const block = document.createElement('div');
+      block.className = 'resources-block';
+
+      resources.forEach(r => {
+        const card = document.createElement('a');
+        card.className = 'resource-card';
+        card.href = r.url;
+        card.target = '_blank';
+        card.rel = 'noopener noreferrer';
+        
+        const titleDiv = document.createElement('div');
+        titleDiv.className = 'resource-title';
+        titleDiv.textContent = r.title;
+        
+        const whyDiv = document.createElement('div');
+        whyDiv.className = 'resource-why';
+        whyDiv.textContent = r.why;
+        
+        card.appendChild(titleDiv);
+        card.appendChild(whyDiv);
+
+        if (Array.isArray(r.how_to_start) && r.how_to_start.length > 0) {
+          const stepsDiv = document.createElement('div');
+          stepsDiv.className = 'resource-steps';
+          
+          r.how_to_start.forEach(step => {
+            const pill = document.createElement('span');
+            pill.className = 'step-pill';
+            pill.textContent = step;
+            stepsDiv.appendChild(pill);
+          });
+          
+          card.appendChild(stepsDiv);
+        }
+        
+        block.appendChild(card);
+      });
+      
+      bubble.appendChild(block);
+      row.appendChild(bubble);
+      messagesEl.appendChild(row);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    async function send() {
+      const msg = inputEl.value.trim();
+      if (!msg) return;
+      
+      addMessage('user', msg);
+      inputEl.value = '';
+      inputEl.style.height = 'auto';
+      sendBtn.disabled = true;
+      
+      history.push({ role: 'user', content: msg });
+      
+      try {
+        const res = await fetch('/api/navigate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            message: msg, 
+            history,
+            age: '',
+            topics: []
+          }),
+        });
+        
+        const data = await res.json();
+        
+        if (data.error) {
+          addMessage('assistant', `Error: ${data.error}`);
+        } else {
+          if (data.mode === 'safety') {
+            addMessage('assistant', data.intro);
+            addResources(data.resources || []);
+          } else if (data.mode === 'recommendations') {
+            addMessage('assistant', data.intro);
+            if (data.clarifying_question) {
+              addMessage('assistant', data.clarifying_question);
+            }
+            addResources(data.resources || []);
+          } else if (data.mode === 'no_match') {
+            addMessage('assistant', data.intro);
+          }
+          
+          history.push({ role: 'assistant', content: data.intro });
+        }
+      } catch (err) {
+        addMessage('assistant', 'Connection error. Please try again.');
+      }
+      
+      sendBtn.disabled = false;
+      inputEl.focus();
+    }
+
+    inputEl.addEventListener('input', autoGrowTextarea);
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      }
+    });
+
+    sendBtn.addEventListener('click', send);
+    autoGrowTextarea();
+    inputEl.focus();
+  </script>
 </body>
 </html>
