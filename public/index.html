@@ -123,13 +123,13 @@
     }
 
     @keyframes slideIn {
-      from { 
-        opacity: 0; 
-        transform: translateY(8px); 
+      from {
+        opacity: 0;
+        transform: translateY(8px);
       }
-      to { 
-        opacity: 1; 
-        transform: translateY(0); 
+      to {
+        opacity: 1;
+        transform: translateY(0);
       }
     }
 
@@ -290,8 +290,8 @@
     }
 
     @media (max-width: 640px) {
-      h1 { 
-        font-size: 36px; 
+      h1 {
+        font-size: 36px;
       }
       .header-section {
         padding: 40px 16px 0;
@@ -375,19 +375,30 @@
       }
     }
 
+    function scrollToBottom() {
+      const container = document.querySelector('.messages-container');
+      container.scrollTop = container.scrollHeight;
+    }
+
     function addMessage(role, content) {
       const row = document.createElement('div');
       row.className = `msg-row ${role}`;
-      
+
       const bubble = document.createElement('div');
       bubble.className = `bubble ${role}`;
       bubble.textContent = content;
-      
+
       row.appendChild(bubble);
       messagesEl.appendChild(row);
-      
-      const container = document.querySelector('.messages-container');
-      container.scrollTop = container.scrollHeight;
+      scrollToBottom();
+    }
+
+    function addAssistantParagraphs(paragraphs) {
+      if (!Array.isArray(paragraphs)) return;
+      paragraphs
+        .map(p => String(p || '').trim())
+        .filter(Boolean)
+        .forEach(p => addMessage('assistant', p));
     }
 
     function addResources(resources) {
@@ -395,7 +406,7 @@
 
       const row = document.createElement('div');
       row.className = 'msg-row assistant';
-      
+
       const block = document.createElement('div');
       block.className = 'resources-block';
 
@@ -405,90 +416,122 @@
         item.href = r.url;
         item.target = '_blank';
         item.rel = 'noopener noreferrer';
-        
+
         const titleDiv = document.createElement('div');
         titleDiv.className = 'resource-title';
         titleDiv.textContent = r.title;
-        
+
         const whyDiv = document.createElement('div');
         whyDiv.className = 'resource-why';
-        whyDiv.textContent = r.why;
-        
+        whyDiv.textContent = r.why || '';
+
         item.appendChild(titleDiv);
-        item.appendChild(whyDiv);
+        if (r.why) item.appendChild(whyDiv);
 
         if (Array.isArray(r.how_to_start) && r.how_to_start.length > 0) {
           const stepsDiv = document.createElement('div');
           stepsDiv.className = 'resource-steps';
-          
+
           r.how_to_start.forEach(step => {
             const pill = document.createElement('span');
             pill.className = 'step-pill';
             pill.textContent = step;
             stepsDiv.appendChild(pill);
           });
-          
+
           item.appendChild(stepsDiv);
         }
-        
+
         block.appendChild(item);
       });
-      
+
       row.appendChild(block);
       messagesEl.appendChild(row);
-      
-      const container = document.querySelector('.messages-container');
-      container.scrollTop = container.scrollHeight;
+      scrollToBottom();
     }
 
     async function send() {
       const msg = inputEl.value.trim();
       if (!msg) return;
-      
+
       collapseHeader();
       addMessage('user', msg);
+
       inputEl.value = '';
       inputEl.style.height = 'auto';
       sendBtn.disabled = true;
-      
+
       history.push({ role: 'user', content: msg });
-      
+
       try {
         const res = await fetch('/api/navigate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            message: msg, 
+          body: JSON.stringify({
+            message: msg,
             history,
             age: '',
             topics: []
           }),
         });
-        
-        const data = await res.json();
-        
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          const detail = data && (data.detail || data.error);
+          addMessage('assistant', detail ? String(detail) : 'Something went wrong. Please try again.');
+          sendBtn.disabled = false;
+          inputEl.focus();
+          return;
+        }
+
         if (data.error) {
-          addMessage('assistant', `Something went wrong. Please try again.`);
-        } else {
-          if (data.mode === 'safety') {
-            addMessage('assistant', data.intro);
-            addResources(data.resources || []);
-          } else if (data.mode === 'recommendations') {
-            addMessage('assistant', data.intro);
-            if (data.clarifying_question) {
-              addMessage('assistant', data.clarifying_question);
-            }
-            addResources(data.resources || []);
-          } else if (data.mode === 'no_match') {
-            addMessage('assistant', data.intro);
+          const detail = data.detail || data.error;
+          addMessage('assistant', detail ? String(detail) : 'Something went wrong. Please try again.');
+          sendBtn.disabled = false;
+          inputEl.focus();
+          return;
+        }
+
+        // Render modes your API actually returns
+        if (data.mode === 'conversation') {
+          addMessage('assistant', data.intro || "I'm here. What's going on?");
+        } else if (data.mode === 'recommendations_paragraphs') {
+          if (data.intro) addMessage('assistant', data.intro);
+          if (Array.isArray(data.paragraphs) && data.paragraphs.length) {
+            addAssistantParagraphs(data.paragraphs);
+          } else if (Array.isArray(data.resources) && data.resources.length) {
+            // fallback if paragraphs missing
+            addResources(data.resources);
           }
-          
-          history.push({ role: 'assistant', content: data.intro });
+        } else if (data.mode === 'safety') {
+          if (data.intro) addMessage('assistant', data.intro);
+          // safety can still show resources as links/cards if you want
+          addResources(data.resources || []);
+        } else if (data.mode === 'recommendations') {
+          if (data.intro) addMessage('assistant', data.intro);
+          if (data.clarifying_question) addMessage('assistant', data.clarifying_question);
+          addResources(data.resources || []);
+        } else if (data.mode === 'no_match') {
+          addMessage('assistant', data.intro || 'Tell me one more detail so I can narrow this down.');
+        } else {
+          // unknown mode fallback
+          addMessage('assistant', data.intro || 'I got your message. Tell me a bit more.');
+          if (Array.isArray(data.paragraphs)) addAssistantParagraphs(data.paragraphs);
+        }
+
+        // Keep history aligned with what the user actually saw
+        if (data.intro) history.push({ role: 'assistant', content: String(data.intro) });
+        if (Array.isArray(data.paragraphs)) {
+          data.paragraphs
+            .map(p => String(p || '').trim())
+            .filter(Boolean)
+            .forEach(p => history.push({ role: 'assistant', content: p }));
         }
       } catch (err) {
-        addMessage('assistant', 'Connection error. Please try again.');
+        addMessage('assistant', 'Something blocked the request. Open DevTools → Network, click /api/navigate, and look at the response body.');
       }
-      
+
       sendBtn.disabled = false;
       inputEl.focus();
     }
