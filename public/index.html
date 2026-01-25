@@ -13,6 +13,8 @@
       --text-secondary: #b0b0b0;
       --accent-blue: #3d5a9f;
       --accent-blue-hover: #2f4878;
+      --accent-red: #d64545;
+      --accent-red-hover: #c23636;
       --border-soft: rgba(255,255,255,0.08);
       --message-user: #0f0f10;
       --message-user-border: rgba(255,255,255,0.10);
@@ -35,7 +37,6 @@
       line-height: 1.6;
     }
 
-    /* Claude-like layout: centered column, composer fixed at bottom, compact chat area */
     .app {
       min-height: 100vh;
     }
@@ -46,10 +47,14 @@
       padding: 0 20px;
     }
 
-    /* Landing state: title + description + composer, vertically centered-ish */
+    /* Landing: centered, compact */
     .landing {
-      padding-top: 120px;
-      padding-bottom: 140px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
       text-align: center;
     }
 
@@ -57,22 +62,22 @@
       font-size: clamp(44px, 6.2vw, 66px);
       font-weight: 600;
       letter-spacing: -0.02em;
-      margin: 0 0 14px 0;
+      margin: 0 0 20px 0;
     }
 
     .desc {
-      margin: 0 auto;
+      margin: 0 auto 40px;
       max-width: 640px;
       color: var(--text-secondary);
       font-size: 16px;
       line-height: 1.85;
     }
 
-    /* Chat state: small top spacing, messages start near top, not floating in empty space */
+    /* Chat state: minimal top padding */
     .chat {
       display: none;
-      padding-top: 18px;
-      padding-bottom: 140px; /* space for fixed composer */
+      padding-top: 12px;
+      padding-bottom: 140px;
     }
 
     .chat.active {
@@ -82,8 +87,8 @@
     .messages {
       display: flex;
       flex-direction: column;
-      gap: 16px;
-      margin-top: 10px;
+      gap: 18px;
+      margin-top: 0;
     }
 
     .msg-row {
@@ -100,7 +105,7 @@
     }
 
     .bubble {
-      max-width: min(680px, 92%);
+      max-width: min(720px, 96%);
       padding: 12px 16px;
       border-radius: 14px;
       font-size: 16px;
@@ -109,21 +114,18 @@
       word-wrap: break-word;
     }
 
-    /* User bubble: subtle, Claude-like, not bright */
     .bubble.user {
       background: rgba(0,0,0,0.30);
       border: 1px solid var(--message-user-border);
       color: rgba(255,255,255,0.92);
     }
 
-    /* Assistant bubble: plain text (no container), like Claude */
     .bubble.assistant {
       background: var(--message-assistant);
       color: rgba(255,255,255,0.92);
       padding-left: 0;
       padding-right: 0;
       border-radius: 0;
-      max-width: min(720px, 96%);
     }
 
     .bubble.assistant strong { color: rgba(255,255,255,0.95); }
@@ -142,7 +144,7 @@
 
     .input-bar {
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: 1fr auto auto;
       gap: 10px;
       align-items: flex-end;
       background: rgba(255,255,255,0.05);
@@ -214,6 +216,64 @@
       stroke-linejoin: round;
     }
 
+    .help-btn-inline {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      border: 1px solid var(--border-soft);
+      background: rgba(214, 69, 69, 0.08);
+      color: rgba(214, 69, 69, 0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+      padding: 0;
+      text-decoration: none;
+      position: relative;
+    }
+
+    .help-btn-inline.show {
+      display: flex;
+    }
+
+    .help-btn-inline:hover {
+      background: rgba(214, 69, 69, 0.15);
+      color: var(--accent-red);
+      border-color: rgba(214, 69, 69, 0.3);
+    }
+
+    .help-btn-inline svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    .help-btn-inline::after {
+      content: 'Get help immediately';
+      position: absolute;
+      bottom: -28px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.85);
+      color: white;
+      padding: 5px 9px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-family: 'EB Garamond', Georgia, serif;
+      font-weight: 400;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      z-index: 10;
+    }
+
+    .help-btn-inline:hover::after {
+      opacity: 1;
+    }
+
     .status {
       margin-top: 10px;
       color: rgba(255,255,255,0.65);
@@ -222,7 +282,6 @@
     }
 
     @media (max-width: 640px) {
-      .landing { padding-top: 80px; }
       .center { padding: 0 16px; }
       .bubble.assistant { max-width: 100%; }
     }
@@ -262,6 +321,9 @@
             autocomplete="off"
             spellcheck="true"
           ></textarea>
+          <a id="help-btn-inline" href="https://www.crisistextline.org/" target="_blank" rel="noopener noreferrer" class="help-btn-inline">
+            <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" fill="currentColor"/></svg>
+          </a>
           <button id="send-btn" class="btn" title="Send message">
             <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </button>
@@ -278,10 +340,10 @@
     const inputEl = document.getElementById('input');
     const sendBtn = document.getElementById('send-btn');
     const statusEl = document.getElementById('status');
+    const helpBtnInline = document.getElementById('help-btn-inline');
 
     let history = [];
     let started = false;
-    let pendingId = null;
 
     function autoGrowTextarea() {
       inputEl.style.height = 'auto';
@@ -293,6 +355,7 @@
       started = true;
       landingEl.style.display = 'none';
       chatEl.classList.add('active');
+      helpBtnInline.classList.add('show');
     }
 
     function addMessage(role, content) {
@@ -306,7 +369,6 @@
       row.appendChild(bubble);
       messagesEl.appendChild(row);
 
-      // Scroll near the bottom (Claude-like)
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' });
       return row;
     }
@@ -338,9 +400,7 @@
 
       history.push({ role: 'user', content: msg });
 
-      // Add a temporary assistant placeholder so it never looks like "nothing happened"
       const pendingRow = addMessage('assistant', 'Thinking...');
-      pendingId = pendingRow;
 
       try {
         const res = await fetch('/api/navigate', {
