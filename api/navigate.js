@@ -1,5 +1,5 @@
 // api/navigate.js - SinePatre Resource Navigator
-// Env vars required: OPENAI_API_KEY, GOOGLE_SHEET_CSV_URL
+// Smart, conversational AI that listens first, recommends only when asked
 
 const MAX_MESSAGE_LENGTH = 1200;
 const MAX_HISTORY_ITEMS = 20;
@@ -10,6 +10,12 @@ const SAFETY_REGEX = [
   /\b(i am not safe|i'm not safe|unsafe at home|in danger)\b/i,
   /\b(abuse|sexual assault|rape|molested|violence)\b/i,
   /\b(overdose|poison|hang)\b/i,
+];
+
+const RESOURCE_REQUEST_KEYWORDS = [
+  "resource", "help", "recommend", "option", "program", "support", 
+  "organization", "where can", "how do i", "do you have", "know any",
+  "suggest", "idea", "what would help", "what can", "show me"
 ];
 
 function setCors(req, res) {
@@ -26,6 +32,11 @@ function send(req, res, status, payload) {
 
 function triggeredSafety(message) {
   return SAFETY_REGEX.some((rx) => rx.test(message));
+}
+
+function isAskingForResources(message) {
+  const lower = message.toLowerCase();
+  return RESOURCE_REQUEST_KEYWORDS.some(kw => lower.includes(kw));
 }
 
 function normalize(text) {
@@ -170,7 +181,7 @@ async function openaiJSON(apiKey, messages) {
     },
     body: JSON.stringify({
       model: "gpt-4o-mini",
-      temperature: 0.25,
+      temperature: 0.7,
       response_format: { type: "json_object" },
       messages,
     }),
@@ -236,13 +247,46 @@ export default async function handler(req, res) {
     });
   }
 
+  // Check if user is asking for resources
+  const askingForResources = isAskingForResources(message);
+
   try {
+    // If not asking for resources, just have a conversational response
+    if (!askingForResources) {
+      const conversationResponse = await openaiJSON(apiKey, [
+        {
+          role: "system",
+          content: `You are a warm, empathetic listener for fatherless teens. You are having a real conversation, not giving advice or therapy.
+          
+Listen deeply to what they're sharing. Ask follow-up questions to understand better. Be genuine and relatable. Only mention resources if they explicitly ask.
+
+Output JSON only: { "response": string }
+
+Rules:
+- Keep responses conversational and natural (2-4 sentences)
+- Ask one genuine follow-up question to go deeper
+- Never give unsolicited advice
+- Acknowledge their feelings
+- Sound like a real person, not an AI`,
+        },
+        ...history,
+        { role: "user", content: message },
+      ]);
+
+      return send(req, res, 200, {
+        mode: "conversation",
+        intro: conversationResponse.response || "I hear you. Tell me more.",
+        resources: [],
+      });
+    }
+
+    // User asked for resources, so provide them
     const resources = await loadResources(csvUrl);
 
     const classification = await openaiJSON(apiKey, [
       {
         role: "system",
-        content: "You are an expert intake assistant for fatherless teens. Output JSON only: { \"need_tags\": string[], \"urgency\": \"low|medium|high\", \"intent\": \"explore|pick_best|compare|clarify\" }",
+        content: "You are an expert at understanding what kind of support a teen needs. Output JSON only: { \"need_tags\": string[], \"urgency\": \"low|medium|high\", \"notes\": string }",
       },
       ...history,
       { role: "user", content: message },
@@ -266,7 +310,7 @@ export default async function handler(req, res) {
     if (!ranked.length) {
       return send(req, res, 200, {
         mode: "no_match",
-        intro: "I can help. Tell me one more detail: are you looking to talk now, ongoing support, or mentorship?",
+        intro: "I want to help, but I need to understand your situation better. Can you tell me more about what kind of support you're looking for?",
         resources: [],
       });
     }
@@ -277,13 +321,18 @@ export default async function handler(req, res) {
     const response = await openaiJSON(apiKey, [
       {
         role: "system",
-        content: `You are SinePatre, a calm guide for fatherless teens. Output JSON only: { "intro": string, "resources": [{ "title": string, "url": string, "why": string, "how_to_start": string[] }] }
-Rules: Return 1-3 resources. Each why must be 2-3 sentences, specific and grounded in the database field. how_to_start must contain only: Call, Text, Form, Walk-in, Referral. No generic advice.`,
+        content: `You help teens find resources. You ONLY use the provided resources. Output JSON: { "intro": string, "resources": [{ "title": string, "url": string, "why": string, "how_to_start": string[] }] }
+
+Rules:
+- Return 1-3 resources
+- intro: brief, warm intro (2 sentences)
+- why: 2-3 sentences, grounded in the resource
+- how_to_start: only Call, Text, Form, Walk-in, Referral`,
       },
       ...history,
       {
         role: "user",
-        content: `Message: "${message}"\n\nResources to choose from: ${JSON.stringify(topForWriter.map(r => ({ title: r.title, url: r.url, description: r.description, best_for: r.best_for, when_to_use: r.when_to_use })))}`,
+        content: `User asked for help with: "${message}"\n\nResources: ${JSON.stringify(topForWriter.map(r => ({ title: r.title, url: r.url, description: r.description, best_for: r.best_for, when_to_use: r.when_to_use })))}`,
       },
     ]);
 
@@ -307,7 +356,7 @@ Rules: Return 1-3 resources. Each why must be 2-3 sentences, specific and ground
 
     return send(req, res, 200, {
       mode: "recommendations",
-      intro: String(response.intro || "Here is what fits best based on what you shared.").trim(),
+      intro: String(response.intro || "Here are some options that might help.").trim(),
       resources: clipped,
     });
   } catch (err) {
