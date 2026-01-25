@@ -18,15 +18,8 @@
       --message-assistant: rgba(255,255,255,0.06);
     }
 
-    * {
-      box-sizing: border-box;
-    }
-
-    html, body {
-      height: 100%;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; padding: 0; }
 
     body {
       font-family: 'EB Garamond', Georgia, serif;
@@ -44,32 +37,24 @@
       height: 100vh;
     }
 
+    /* Initial hero state: centered like Claude start screen */
     .header-section {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      padding: 60px 24px 0;
+      justify-content: flex-end;
       text-align: center;
-      transition: all 0.4s ease;
-    }
-
-    .header-section.collapsed {
-      padding: 20px 24px 0;
+      padding: 72px 24px 16px;
+      transition: padding 0.35s ease, transform 0.35s ease, opacity 0.35s ease;
     }
 
     h1 {
-      margin: 0 0 16px 0;
-      font-weight: 500;
+      margin: 0 0 12px 0;
+      font-weight: 600;
       font-size: clamp(44px, 7vw, 64px);
-      line-height: 1.1;
+      line-height: 1.05;
       letter-spacing: -0.02em;
       color: var(--text-primary);
-    }
-
-    .header-section.collapsed h1 {
-      font-size: 24px;
-      margin-bottom: 0;
     }
 
     .description-text {
@@ -77,65 +62,67 @@
       color: var(--text-secondary);
       font-size: 16px;
       line-height: 1.8;
-      max-width: 640px;
+      max-width: 680px;
       font-weight: 400;
       opacity: 1;
-      transition: opacity 0.3s ease, max-height 0.3s ease;
       max-height: 300px;
       overflow: hidden;
+      transition: opacity 0.25s ease, max-height 0.25s ease;
     }
 
-    .header-section.collapsed .description-text {
+    /* Chat state: tighter, less dead space, like Claude conversation view */
+    body.started .header-section {
+      padding: 26px 24px 8px;
+    }
+
+    body.started h1 {
+      font-size: 26px;
+      margin-bottom: 0;
+      font-weight: 600;
+    }
+
+    body.started .description-text {
       opacity: 0;
       max-height: 0;
-      margin: 0;
     }
 
+    /* Messages area */
     .messages-container {
       flex: 1;
       display: flex;
-      flex-direction: column;
-      gap: 16px;
-      padding: 36px 24px;
-      overflow-y: auto;
-      max-width: 900px;
-      margin: 0 auto;
-      width: 100%;
+      justify-content: center;
+      overflow: hidden;
     }
 
-    .messages {
+    .messages-inner {
+      width: 100%;
+      max-width: 820px;
+      padding: 18px 24px 0;
+      overflow-y: auto;
+    }
+
+    #messages {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 14px;
+      padding-bottom: 140px;
     }
 
     .msg-row {
       display: flex;
-      animation: slideIn 0.3s ease-out;
+      animation: slideIn 0.18s ease-out;
     }
-
-    .msg-row.user {
-      justify-content: flex-end;
-    }
-
-    .msg-row.assistant {
-      justify-content: flex-start;
-    }
+    .msg-row.user { justify-content: flex-end; }
+    .msg-row.assistant { justify-content: flex-start; }
 
     @keyframes slideIn {
-      from {
-        opacity: 0;
-        transform: translateY(8px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     .bubble {
-      max-width: 600px;
-      padding: 14px 18px;
+      max-width: 680px;
+      padding: 12px 16px;
       border-radius: 16px;
       font-size: 16px;
       line-height: 1.7;
@@ -145,19 +132,36 @@
 
     .bubble.user {
       background: var(--message-user);
-      color: white;
+      color: #fff;
     }
 
     .bubble.assistant {
       background: transparent;
       color: var(--text-primary);
+      padding-left: 2px;
     }
 
+    .bubble.system {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border-soft);
+      color: var(--text-secondary);
+    }
+
+    /* Composer pinned bottom, centered like Claude */
     .composer-wrap {
-      padding: 0 24px 24px 24px;
-      max-width: 900px;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 16px 0 18px;
+      background: linear-gradient(to bottom, rgba(44,44,44,0), rgba(44,44,44,0.92) 35%, rgba(44,44,44,0.98));
+      backdrop-filter: blur(6px);
+    }
+
+    .composer-inner {
+      max-width: 820px;
       margin: 0 auto;
-      width: 100%;
+      padding: 0 24px;
     }
 
     .input-bar {
@@ -188,7 +192,7 @@
       line-height: 1.5;
       resize: none;
       min-height: 22px;
-      max-height: 100px;
+      max-height: 120px;
       padding: 4px 0;
       font-weight: 400;
     }
@@ -234,122 +238,49 @@
       stroke-linejoin: round;
     }
 
-    .resources-block {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      margin-top: 0;
-    }
-
-    .resource-item {
-      background: rgba(255,255,255,0.05);
-      border: 1px solid var(--border-soft);
-      border-radius: 12px;
-      padding: 14px;
-      text-decoration: none;
-      color: inherit;
-      transition: all 0.2s ease;
-    }
-
-    .resource-item:hover {
-      background: rgba(255,255,255,0.08);
-      border-color: rgba(61, 90, 159, 0.3);
-    }
-
-    .resource-title {
-      font-weight: 600;
-      color: var(--accent-blue);
-      margin-bottom: 8px;
-      text-decoration: none;
-      display: block;
-    }
-
-    .resource-title:hover {
-      text-decoration: underline;
-    }
-
-    .resource-why {
-      font-size: 15px;
-      color: var(--text-secondary);
-      line-height: 1.6;
-      margin-bottom: 8px;
-    }
-
-    .resource-steps {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-
-    .step-pill {
-      background: rgba(61, 90, 159, 0.2);
-      color: var(--accent-blue);
-      padding: 4px 10px;
-      border-radius: 10px;
-      font-size: 13px;
-    }
-
     @media (max-width: 640px) {
-      h1 {
-        font-size: 36px;
-      }
-      .header-section {
-        padding: 40px 16px 0;
-      }
-      .messages-container {
-        padding: 24px 16px;
-      }
-      .composer-wrap {
-        padding: 0 16px 16px 16px;
-      }
-      .bubble {
-        max-width: 100%;
-      }
+      .messages-inner { padding: 14px 16px 0; }
+      .composer-inner { padding: 0 16px; }
+      .bubble { max-width: 100%; }
     }
 
-    ::-webkit-scrollbar {
-      width: 6px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: rgba(255,255,255,0.1);
-      border-radius: 3px;
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-      background: rgba(255,255,255,0.15);
-    }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
   </style>
 </head>
+
 <body>
   <div class="page">
     <div class="header-section" id="header-section">
       <h1>SinePatre</h1>
       <p class="description-text">
-        A private guide designed for fatherless teens seeking support. Share what's on your mind, and I'll listen. When you're ready, I can point you toward real resources with practical next steps. This conversation stays between us.
+        A private guide designed for fatherless teens seeking support. Share what's on your mind, and I'll listen.
+        When you're ready, I can point you toward real resources with practical next steps. This conversation stays between us.
       </p>
     </div>
 
     <div class="messages-container">
-      <div id="messages" class="messages" aria-live="polite" aria-label="Chat messages"></div>
+      <div class="messages-inner" id="messages-inner">
+        <div id="messages" aria-live="polite" aria-label="Chat messages"></div>
+      </div>
     </div>
 
     <div class="composer-wrap">
-      <div class="input-bar" role="group" aria-label="Message composer">
-        <textarea
-          id="input"
-          placeholder="What's on your mind?"
-          rows="1"
-          autocomplete="off"
-          spellcheck="true"
-        ></textarea>
-        <button id="send-btn" class="btn" title="Send message">
-          <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        </button>
+      <div class="composer-inner">
+        <div class="input-bar" role="group" aria-label="Message composer">
+          <textarea
+            id="input"
+            placeholder="What's on your mind?"
+            rows="1"
+            autocomplete="off"
+            spellcheck="true"
+          ></textarea>
+          <button id="send-btn" class="btn" title="Send message">
+            <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -358,34 +289,32 @@
     const messagesEl = document.getElementById('messages');
     const inputEl = document.getElementById('input');
     const sendBtn = document.getElementById('send-btn');
-    const headerSection = document.getElementById('header-section');
+    const messagesInner = document.getElementById('messages-inner');
 
     let history = [];
-    let hasStarted = false;
+    let started = false;
 
     function autoGrowTextarea() {
       inputEl.style.height = 'auto';
-      inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px';
+      inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
     }
 
-    function collapseHeader() {
-      if (!hasStarted) {
-        hasStarted = true;
-        headerSection.classList.add('collapsed');
-      }
+    function ensureStarted() {
+      if (started) return;
+      started = true;
+      document.body.classList.add('started');
     }
 
     function scrollToBottom() {
-      const container = document.querySelector('.messages-container');
-      container.scrollTop = container.scrollHeight;
+      messagesInner.scrollTop = messagesInner.scrollHeight;
     }
 
-    function addMessage(role, content) {
+    function addMessage(role, content, kind = '') {
       const row = document.createElement('div');
       row.className = `msg-row ${role}`;
 
       const bubble = document.createElement('div');
-      bubble.className = `bubble ${role}`;
+      bubble.className = `bubble ${kind || role}`;
       bubble.textContent = content;
 
       row.appendChild(bubble);
@@ -393,68 +322,19 @@
       scrollToBottom();
     }
 
-    function addAssistantParagraphs(paragraphs) {
+    function addParagraphs(paragraphs) {
       if (!Array.isArray(paragraphs)) return;
-      paragraphs
-        .map(p => String(p || '').trim())
-        .filter(Boolean)
-        .forEach(p => addMessage('assistant', p));
-    }
-
-    function addResources(resources) {
-      if (!Array.isArray(resources) || resources.length === 0) return;
-
-      const row = document.createElement('div');
-      row.className = 'msg-row assistant';
-
-      const block = document.createElement('div');
-      block.className = 'resources-block';
-
-      resources.forEach(r => {
-        const item = document.createElement('a');
-        item.className = 'resource-item';
-        item.href = r.url;
-        item.target = '_blank';
-        item.rel = 'noopener noreferrer';
-
-        const titleDiv = document.createElement('div');
-        titleDiv.className = 'resource-title';
-        titleDiv.textContent = r.title;
-
-        const whyDiv = document.createElement('div');
-        whyDiv.className = 'resource-why';
-        whyDiv.textContent = r.why || '';
-
-        item.appendChild(titleDiv);
-        if (r.why) item.appendChild(whyDiv);
-
-        if (Array.isArray(r.how_to_start) && r.how_to_start.length > 0) {
-          const stepsDiv = document.createElement('div');
-          stepsDiv.className = 'resource-steps';
-
-          r.how_to_start.forEach(step => {
-            const pill = document.createElement('span');
-            pill.className = 'step-pill';
-            pill.textContent = step;
-            stepsDiv.appendChild(pill);
-          });
-
-          item.appendChild(stepsDiv);
-        }
-
-        block.appendChild(item);
+      paragraphs.forEach(p => {
+        const text = String(p || '').trim();
+        if (text) addMessage('assistant', text);
       });
-
-      row.appendChild(block);
-      messagesEl.appendChild(row);
-      scrollToBottom();
     }
 
     async function send() {
       const msg = inputEl.value.trim();
       if (!msg) return;
 
-      collapseHeader();
+      ensureStarted();
       addMessage('user', msg);
 
       inputEl.value = '';
@@ -467,69 +347,57 @@
         const res = await fetch('/api/navigate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: msg,
-            history,
-            age: '',
-            topics: []
-          }),
+          body: JSON.stringify({ message: msg, history }),
         });
 
-        const data = await res.json().catch(() => ({}));
+        const data = await res.json();
 
-        if (!res.ok) {
-          const detail = data && (data.detail || data.error);
-          addMessage('assistant', detail ? String(detail) : 'Something went wrong. Please try again.');
+        if (!res.ok || data.error) {
+          addMessage('assistant', 'Something went wrong. Open DevTools, check Network, and look at the /api/navigate response.', 'system');
+          if (data && data.detail) addMessage('assistant', `Detail: ${data.detail}`, 'system');
           sendBtn.disabled = false;
           inputEl.focus();
           return;
         }
 
-        if (data.error) {
-          const detail = data.detail || data.error;
-          addMessage('assistant', detail ? String(detail) : 'Something went wrong. Please try again.');
-          sendBtn.disabled = false;
-          inputEl.focus();
-          return;
+        // Always show intro if present
+        if (data.intro) {
+          addMessage('assistant', String(data.intro).trim());
+          history.push({ role: 'assistant', content: String(data.intro).trim() });
         }
 
-        // Render modes your API actually returns
-        if (data.mode === 'conversation') {
-          addMessage('assistant', data.intro || "I'm here. What's going on?");
-        } else if (data.mode === 'recommendations_paragraphs') {
-          if (data.intro) addMessage('assistant', data.intro);
-          if (Array.isArray(data.paragraphs) && data.paragraphs.length) {
-            addAssistantParagraphs(data.paragraphs);
-          } else if (Array.isArray(data.resources) && data.resources.length) {
-            // fallback if paragraphs missing
-            addResources(data.resources);
-          }
-        } else if (data.mode === 'safety') {
-          if (data.intro) addMessage('assistant', data.intro);
-          // safety can still show resources as links/cards if you want
-          addResources(data.resources || []);
-        } else if (data.mode === 'recommendations') {
-          if (data.intro) addMessage('assistant', data.intro);
-          if (data.clarifying_question) addMessage('assistant', data.clarifying_question);
-          addResources(data.resources || []);
-        } else if (data.mode === 'no_match') {
-          addMessage('assistant', data.intro || 'Tell me one more detail so I can narrow this down.');
-        } else {
-          // unknown mode fallback
-          addMessage('assistant', data.intro || 'I got your message. Tell me a bit more.');
-          if (Array.isArray(data.paragraphs)) addAssistantParagraphs(data.paragraphs);
+        // Render paragraphs (new API mode)
+        if (data.mode === 'recommendations_paragraphs' && Array.isArray(data.paragraphs)) {
+          addParagraphs(data.paragraphs);
+          // Store only a compact version in history to avoid bloat
+          history.push({ role: 'assistant', content: (data.paragraphs || []).join('\n\n').slice(0, 1200) });
         }
 
-        // Keep history aligned with what the user actually saw
-        if (data.intro) history.push({ role: 'assistant', content: String(data.intro) });
-        if (Array.isArray(data.paragraphs)) {
-          data.paragraphs
-            .map(p => String(p || '').trim())
-            .filter(Boolean)
-            .forEach(p => history.push({ role: 'assistant', content: p }));
+        // Render conversation mode
+        if (data.mode === 'conversation' && data.intro) {
+          // already added above
         }
+
+        // Optional single clarifying question (rare)
+        if (data.clarifying_question) {
+          addMessage('assistant', String(data.clarifying_question).trim());
+          history.push({ role: 'assistant', content: String(data.clarifying_question).trim() });
+        }
+
+        // Safety mode: show resources as plain text paragraphs (not cards)
+        if (data.mode === 'safety' && Array.isArray(data.resources)) {
+          const lines = data.resources.map(r => {
+            const title = r.title ? String(r.title) : 'Resource';
+            const url = r.url ? String(r.url) : '';
+            const why = r.why ? String(r.why) : '';
+            const how = Array.isArray(r.how_to_start) ? r.how_to_start.join(', ') : '';
+            return `${title}\n${url}\n${why}${how ? `\nHow to start: ${how}` : ''}`.trim();
+          });
+          addParagraphs(lines);
+        }
+
       } catch (err) {
-        addMessage('assistant', 'Something blocked the request. Open DevTools → Network, click /api/navigate, and look at the response body.');
+        addMessage('assistant', 'Connection error. Open DevTools and check Network for the /api/navigate request.', 'system');
       }
 
       sendBtn.disabled = false;
