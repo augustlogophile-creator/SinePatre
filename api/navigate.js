@@ -1,8 +1,10 @@
 // api/navigate.js - SinePatre Resource Navigator
 // Smart, conversational AI that listens first, recommends only when asked
+// Updated: more conversational + astute, more sophisticated when prompted,
+// faster-feeling responses (tighter prompts), and returns PARAGRAPHS (no cards).
 
-const MAX_MESSAGE_LENGTH = 1200;
-const MAX_HISTORY_ITEMS = 20;
+const MAX_MESSAGE_LENGTH = 1500;
+const MAX_HISTORY_ITEMS = 30;
 
 const SAFETY_REGEX = [
   /\b(suicide|kill myself|end my life|end it all)\b/i,
@@ -13,9 +15,10 @@ const SAFETY_REGEX = [
 ];
 
 const RESOURCE_REQUEST_KEYWORDS = [
-  "resource", "help", "recommend", "option", "program", "support", 
+  "resource", "help", "recommend", "option", "program", "support",
   "organization", "where can", "how do i", "do you have", "know any",
-  "suggest", "idea", "what would help", "what can", "show me"
+  "suggest", "idea", "what would help", "what can", "show me", "find me",
+  "who can", "hotline", "therapy", "mentor", "support group"
 ];
 
 function setCors(req, res) {
@@ -35,8 +38,8 @@ function triggeredSafety(message) {
 }
 
 function isAskingForResources(message) {
-  const lower = message.toLowerCase();
-  return RESOURCE_REQUEST_KEYWORDS.some(kw => lower.includes(kw));
+  const lower = String(message || "").toLowerCase();
+  return RESOURCE_REQUEST_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
 function normalize(text) {
@@ -59,6 +62,7 @@ function tokenize(text) {
     .filter((w) => w.length > 2 && !stop.has(w));
 }
 
+// Minimal CSV parser (handles quotes)
 function parseCSV(csv) {
   const rows = [];
   let row = [];
@@ -115,7 +119,16 @@ async function loadResources(csvUrl) {
   const headers = rows[0].map((h) => normalize(h).replace(/\s+/g, "_"));
   const col = (name) => headers.indexOf(name);
 
-  const required = ["id", "title", "description", "best_for", "when_to_use", "not_for", "fatherlessness_connection", "url"];
+  const required = [
+    "id",
+    "title",
+    "description",
+    "best_for",
+    "when_to_use",
+    "not_for",
+    "fatherlessness_connection",
+    "url",
+  ];
 
   for (const c of required) {
     if (col(c) === -1) throw new Error(`missing_column:${c}`);
@@ -141,7 +154,13 @@ async function loadResources(csvUrl) {
 
 function isCrisisResource(resource) {
   const t = `${resource.title} ${resource.description} ${resource.when_to_use}`.toLowerCase();
-  return t.includes("crisis") || t.includes("suicide") || t.includes("self-harm") || t.includes("hotline") || t.includes("988");
+  return (
+    t.includes("crisis") ||
+    t.includes("suicide") ||
+    t.includes("self-harm") ||
+    t.includes("hotline") ||
+    t.includes("988")
+  );
 }
 
 function scoreResource(resource, queryTokens, tagTokens, urgency) {
@@ -156,9 +175,7 @@ function scoreResource(resource, queryTokens, tagTokens, urgency) {
   }
 
   const fatherText = (resource.fatherlessness_connection || "").toLowerCase();
-  if (fatherText.includes("father") || fatherText.includes("dad") || fatherText.includes("fatherless")) {
-    score += 6;
-  }
+  if (fatherText.includes("father") || fatherText.includes("dad") || fatherText.includes("fatherless")) score += 6;
 
   if (urgency === "high" && isCrisisResource(resource)) score += 10;
   return score;
@@ -181,7 +198,8 @@ async function openaiJSON(apiKey, messages) {
     },
     body: JSON.stringify({
       model: "gpt-4o-mini",
-      temperature: 0.7,
+      // Lower temp improves speed/consistency and reduces rambling.
+      temperature: 0.45,
       response_format: { type: "json_object" },
       messages,
     }),
@@ -208,6 +226,23 @@ function buildHowToStart(resource) {
   return steps.length ? steps.slice(0, 4) : ["Form", "Call"];
 }
 
+function wantsSophisticatedStyle(message) {
+  const t = normalize(message);
+  return (
+    t.includes("more sophisticated") ||
+    t.includes("be more sophisticated") ||
+    t.includes("sound more sophisticated") ||
+    t.includes("formal") ||
+    t.includes("more mature") ||
+    t.includes("more articulate")
+  );
+}
+
+function isSimpleGreeting(message) {
+  const t = normalize(message);
+  return t === "hey" || t === "hi" || t === "hello" || t === "yo" || t === "sup";
+}
+
 export default async function handler(req, res) {
   setCors(req, res);
 
@@ -232,12 +267,14 @@ export default async function handler(req, res) {
   if (message.length > MAX_MESSAGE_LENGTH) return send(req, res, 400, { error: "Message too long" });
 
   const history = sanitizeHistory(req.body?.history);
+  const sophisticated = wantsSophisticatedStyle(message);
 
   // Safety gate
   if (triggeredSafety(message)) {
     return send(req, res, 200, {
       mode: "safety",
-      intro: "You deserve immediate support. Please reach out right now.",
+      intro:
+        "I am really glad you reached out. You deserve immediate support, please use one of these right now.",
       resources: [
         { title: "988 Suicide & Crisis Lifeline", url: "https://988lifeline.org", why: "Call or text 988, 24/7 in the U.S.", how_to_start: ["Call", "Text"] },
         { title: "Crisis Text Line", url: "https://www.crisistextline.org", why: "Text HOME to 741741 for 24/7 support.", how_to_start: ["Text"] },
@@ -247,46 +284,57 @@ export default async function handler(req, res) {
     });
   }
 
-  // Check if user is asking for resources
   const askingForResources = isAskingForResources(message);
 
   try {
-    // If not asking for resources, just have a conversational response
+    // CONVERSATION MODE (no resources unless explicitly asked)
     if (!askingForResources) {
-      const conversationResponse = await openaiJSON(apiKey, [
+      const convo = await openaiJSON(apiKey, [
         {
           role: "system",
-          content: `You are a warm, empathetic listener for fatherless teens. You are having a real conversation, not giving advice or therapy.
-          
-Listen deeply to what they're sharing. Ask follow-up questions to understand better. Be genuine and relatable. Only mention resources if they explicitly ask.
-
-Output JSON only: { "response": string }
-
-Rules:
-- Keep responses conversational and natural (2-4 sentences)
-- Ask one genuine follow-up question to go deeper
-- Never give unsolicited advice
-- Acknowledge their feelings
-- Sound like a real person, not an AI`,
+          content:
+            "You are SinePatre, a socially astute, warm, teen-friendly conversational partner.\n\n" +
+            "Goal: build trust and understand what is going on before recommending anything.\n" +
+            "Do not give therapy or medical advice. Do not mention external resources unless the user explicitly asks.\n\n" +
+            "Style rules:\n" +
+            "- If the user only says a greeting, respond with a brief greeting back and one gentle question.\n" +
+            "- Otherwise respond in 1 short paragraph (2 to 5 sentences).\n" +
+            "- Ask at most one question.\n" +
+            "- Be specific, reflect one detail from what they said.\n" +
+            "- If the user asks you to be more sophisticated, sound more mature and articulate while staying warm.\n\n" +
+            'Output JSON only: { "response": string }',
         },
         ...history,
         { role: "user", content: message },
       ]);
 
+      // If they literally just say "hey", keep it extra light
+      const responseText =
+        (isSimpleGreeting(message) && !convo?.response)
+          ? "Hey. What is going on today?"
+          : (convo?.response || "Hey. What is going on?");
+
       return send(req, res, 200, {
         mode: "conversation",
-        intro: conversationResponse.response || "I hear you. Tell me more.",
+        intro: responseText,
         resources: [],
       });
     }
 
-    // User asked for resources, so provide them
+    // RESOURCE MODE
     const resources = await loadResources(csvUrl);
 
+    // Lightweight classification to keep it snappy
     const classification = await openaiJSON(apiKey, [
       {
         role: "system",
-        content: "You are an expert at understanding what kind of support a teen needs. Output JSON only: { \"need_tags\": string[], \"urgency\": \"low|medium|high\", \"notes\": string }",
+        content:
+          "You identify what kind of support a teen is asking for. Output JSON only:\n" +
+          '{ "need_tags": string[], "urgency": "low|medium|high", "needs_clarification": boolean, "clarifying_question": string|null }\n\n' +
+          "Rules:\n" +
+          "- Use short tags like: therapy, support-group, mentor, grief, school-stress, anxiety, depression, family, identity, talk-now.\n" +
+          "- If multiple different needs are present and you cannot choose, set needs_clarification=true and ask ONE clarifying question.\n" +
+          "- Do not give advice.",
       },
       ...history,
       { role: "user", content: message },
@@ -310,54 +358,84 @@ Rules:
     if (!ranked.length) {
       return send(req, res, 200, {
         mode: "no_match",
-        intro: "I want to help, but I need to understand your situation better. Can you tell me more about what kind of support you're looking for?",
+        intro:
+          sophisticated
+            ? "I can absolutely help, but I need one detail to narrow the match. Are you looking for someone to talk to soon, a support group, therapy, or mentorship?"
+            : "I can help, but I need one detail. Are you looking for someone to talk to soon, a support group, therapy, or a mentor?",
+        resources: [],
+      });
+    }
+
+    // If clarification needed, ask one question first (still no resources yet)
+    if (classification.needs_clarification && classification.clarifying_question) {
+      return send(req, res, 200, {
+        mode: "conversation",
+        intro: String(classification.clarifying_question).trim(),
         resources: [],
       });
     }
 
     const limit = 3;
-    const topForWriter = ranked.slice(0, Math.max(limit, 5)).map((x) => x.r);
+    const top = ranked.slice(0, Math.max(limit, 5)).map((x) => x.r);
 
+    // Return PARAGRAPHS instead of cards:
+    // one intro paragraph + 1 paragraph per resource including link + how-to-start.
     const response = await openaiJSON(apiKey, [
       {
         role: "system",
-        content: `You help teens find resources. You ONLY use the provided resources. Output JSON: { "intro": string, "resources": [{ "title": string, "url": string, "why": string, "how_to_start": string[] }] }
-
-Rules:
-- Return 1-3 resources
-- intro: brief, warm intro (2 sentences)
-- why: 2-3 sentences, grounded in the resource
-- how_to_start: only Call, Text, Form, Walk-in, Referral`,
+        content:
+          "You are SinePatre, socially astute and direct. The user asked for resources.\n\n" +
+          "You MUST use ONLY the provided resources and their fields. Do not invent details.\n" +
+          "Write in paragraphs, not a list of cards.\n\n" +
+          "Output JSON only: { \"intro\": string, \"paragraphs\": string[] }\n\n" +
+          "Rules:\n" +
+          "- intro: 1 short paragraph (2 to 4 sentences), conversational and specific.\n" +
+          "- paragraphs: 1 to 3 paragraphs total, one per resource.\n" +
+          "- Each resource paragraph must include:\n" +
+          "  (a) the resource name,\n" +
+          "  (b) the URL in plain text,\n" +
+          "  (c) why it fits (2 to 3 sentences) grounded in best_for/when_to_use/description/fatherlessness_connection,\n" +
+          "  (d) a 'How to start:' line using only Call, Text, Form, Walk-in, Referral (2 to 4 items).\n" +
+          "- Be warm, and a little more sophisticated if the user requested that.\n" +
+          "- Do not add time pressure language.\n",
       },
       ...history,
       {
         role: "user",
-        content: `User asked for help with: "${message}"\n\nResources: ${JSON.stringify(topForWriter.map(r => ({ title: r.title, url: r.url, description: r.description, best_for: r.best_for, when_to_use: r.when_to_use })))}`,
+        content: JSON.stringify({
+          message,
+          sophistication: sophisticated ? "high" : "normal",
+          urgency,
+          need_tags: classification.need_tags || [],
+          resources: top.map((r) => ({
+            title: r.title,
+            url: r.url,
+            description: r.description,
+            best_for: r.best_for,
+            when_to_use: r.when_to_use,
+            not_for: r.not_for,
+            fatherlessness_connection: r.fatherlessness_connection,
+          })),
+        }),
       },
     ]);
 
-    const outResources = Array.isArray(response.resources) ? response.resources : [];
-    const clipped = outResources.slice(0, limit).map((x) => {
-      const fallbackSteps = buildHowToStart(
-        topForWriter.find((r) => r.title === x.title) || topForWriter[0]
-      );
+    const paras = Array.isArray(response.paragraphs) ? response.paragraphs : [];
+    const clippedParas = paras.slice(0, limit);
 
-      const allowed = new Set(["Call", "Text", "Form", "Walk-in", "Referral"]);
-      const provided = Array.isArray(x.how_to_start) ? x.how_to_start : [];
-      const cleaned = provided.filter((s) => allowed.has(s)).slice(0, 4);
-
-      return {
-        title: String(x.title || "").trim(),
-        url: String(x.url || "").trim(),
-        why: String(x.why || "").trim(),
-        how_to_start: cleaned.length ? cleaned : fallbackSteps,
-      };
-    });
+    // Provide resources array too, for backwards compatibility, but UI can ignore it.
+    const outResources = top.slice(0, limit).map((r) => ({
+      title: r.title,
+      url: r.url,
+      why: "",
+      how_to_start: buildHowToStart(r),
+    }));
 
     return send(req, res, 200, {
-      mode: "recommendations",
-      intro: String(response.intro || "Here are some options that might help.").trim(),
-      resources: clipped,
+      mode: "recommendations_paragraphs",
+      intro: String(response.intro || "Here are a few options that fit what you asked for.").trim(),
+      paragraphs: clippedParas,
+      resources: outResources,
     });
   } catch (err) {
     console.error("navigate_error", err);
