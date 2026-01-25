@@ -8,12 +8,14 @@
     @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&display=swap');
 
     :root {
-      --bg-dark: #242424;
+      --bg-dark: #2c2c2c;
       --text-primary: #ffffff;
-      --text-secondary: #a0a0a0;
-      --accent-blue: #2d4a8f;
-      --accent-blue-hover: #223861;
+      --text-secondary: #b0b0b0;
+      --accent-blue: #3d5a9f;
+      --accent-blue-hover: #2f4878;
       --border-soft: rgba(255,255,255,0.08);
+      --message-user: #3d5a9f;
+      --message-assistant: rgba(255,255,255,0.06);
     }
 
     * {
@@ -30,65 +32,131 @@
       font-family: 'EB Garamond', Georgia, serif;
       background: var(--bg-dark);
       color: var(--text-primary);
-      letter-spacing: -0.005em;
+      letter-spacing: -0.01em;
       line-height: 1.6;
       display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
+      flex-direction: column;
     }
 
-    .container {
-      width: 100%;
-      max-width: 820px;
-      padding: 48px 24px;
+    .page {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .header-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 24px 0;
       text-align: center;
+      transition: all 0.4s ease;
     }
 
-    .header {
-      margin-bottom: 48px;
-    }
-
-    .title-with-icon {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 14px;
-      margin-bottom: 20px;
-    }
-
-    .icon {
-      width: 44px;
-      height: 44px;
-      border-radius: 7px;
-      background: var(--accent-blue);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 22px;
-      font-weight: 600;
+    .header-section.collapsed {
+      padding: 20px 24px 0;
     }
 
     h1 {
-      margin: 0;
+      margin: 0 0 16px 0;
       font-weight: 500;
-      font-size: clamp(40px, 6vw, 56px);
+      font-size: clamp(44px, 7vw, 64px);
       line-height: 1.1;
-      letter-spacing: -0.015em;
+      letter-spacing: -0.02em;
       color: var(--text-primary);
     }
 
-    .description {
-      margin: 20px 0 0 0;
+    .header-section.collapsed h1 {
+      font-size: 24px;
+      margin-bottom: 0;
+    }
+
+    .description-text {
+      margin: 0;
       color: var(--text-secondary);
-      font-size: 15px;
+      font-size: 16px;
       line-height: 1.8;
-      max-width: 680px;
-      margin-left: auto;
-      margin-right: auto;
+      max-width: 640px;
+      font-weight: 400;
+      opacity: 1;
+      transition: opacity 0.3s ease, max-height 0.3s ease;
+      max-height: 300px;
+      overflow: hidden;
+    }
+
+    .header-section.collapsed .description-text {
+      opacity: 0;
+      max-height: 0;
+      margin: 0;
+    }
+
+    .messages-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 36px 24px;
+      overflow-y: auto;
+      max-width: 900px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .messages {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .msg-row {
+      display: flex;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    .msg-row.user {
+      justify-content: flex-end;
+    }
+
+    .msg-row.assistant {
+      justify-content: flex-start;
+    }
+
+    @keyframes slideIn {
+      from { 
+        opacity: 0; 
+        transform: translateY(8px); 
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0); 
+      }
+    }
+
+    .bubble {
+      max-width: 600px;
+      padding: 14px 18px;
+      border-radius: 16px;
+      font-size: 16px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .bubble.user {
+      background: var(--message-user);
+      color: white;
+    }
+
+    .bubble.assistant {
+      background: transparent;
+      color: var(--text-primary);
     }
 
     .composer-wrap {
+      padding: 0 24px 24px 24px;
+      max-width: 900px;
+      margin: 0 auto;
       width: 100%;
     }
 
@@ -96,17 +164,17 @@
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 10px;
-      align-items: center;
-      background: rgba(255,255,255,0.04);
+      align-items: flex-end;
+      background: rgba(255,255,255,0.05);
       border: 1px solid var(--border-soft);
-      border-radius: 20px;
+      border-radius: 22px;
       padding: 13px 16px;
       transition: all 0.2s ease;
     }
 
     .input-bar:focus-within {
-      border-color: rgba(45, 74, 143, 0.4);
-      background: rgba(255,255,255,0.06);
+      border-color: rgba(61, 90, 159, 0.4);
+      background: rgba(255,255,255,0.08);
     }
 
     textarea {
@@ -131,9 +199,9 @@
     }
 
     .btn {
-      width: 38px;
-      height: 38px;
-      border-radius: 9px;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
       border: 1px solid var(--border-soft);
       background: var(--accent-blue);
       color: white;
@@ -148,7 +216,7 @@
 
     .btn:hover:not(:disabled) {
       background: var(--accent-blue-hover);
-      border-color: rgba(45, 74, 143, 0.5);
+      border-color: rgba(61, 90, 159, 0.5);
     }
 
     .btn:disabled {
@@ -166,88 +234,26 @@
       stroke-linejoin: round;
     }
 
-    .messages {
-      display: none;
-      flex-direction: column;
-      gap: 14px;
-      margin-top: 36px;
-      max-height: 450px;
-      overflow-y: auto;
-    }
-
-    .messages.active {
-      display: flex;
-    }
-
-    .msg-row {
-      display: flex;
-      animation: slideIn 0.3s ease-out;
-    }
-
-    .msg-row.user {
-      justify-content: flex-end;
-    }
-
-    .msg-row.assistant {
-      justify-content: flex-start;
-    }
-
-    @keyframes slideIn {
-      from { 
-        opacity: 0; 
-        transform: translateY(4px); 
-      }
-      to { 
-        opacity: 1; 
-        transform: translateY(0); 
-      }
-    }
-
-    .bubble {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      max-width: 520px;
-    }
-
-    .msg-text {
-      padding: 11px 15px;
-      border-radius: 14px;
-      font-size: 15px;
-      line-height: 1.6;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-    }
-
-    .msg-text.user {
-      background: var(--accent-blue);
-      color: white;
-    }
-
-    .msg-text.assistant {
-      background: rgba(255,255,255,0.06);
-      color: var(--text-primary);
-    }
-
     .resources-block {
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      margin-top: 12px;
+      gap: 12px;
+      margin-top: 0;
     }
 
-    .resource-card {
-      background: rgba(255,255,255,0.06);
+    .resource-item {
+      background: rgba(255,255,255,0.05);
       border: 1px solid var(--border-soft);
       border-radius: 12px;
-      padding: 12px;
+      padding: 14px;
       text-decoration: none;
       color: inherit;
+      transition: all 0.2s ease;
     }
 
-    .resource-card:hover {
+    .resource-item:hover {
       background: rgba(255,255,255,0.08);
-      border-color: rgba(45, 74, 143, 0.3);
+      border-color: rgba(61, 90, 159, 0.3);
     }
 
     .resource-title {
@@ -255,6 +261,7 @@
       color: var(--accent-blue);
       margin-bottom: 8px;
       text-decoration: none;
+      display: block;
     }
 
     .resource-title:hover {
@@ -262,7 +269,7 @@
     }
 
     .resource-why {
-      font-size: 14px;
+      font-size: 15px;
       color: var(--text-secondary);
       line-height: 1.6;
       margin-bottom: 8px;
@@ -275,10 +282,10 @@
     }
 
     .step-pill {
-      background: rgba(45, 74, 143, 0.2);
+      background: rgba(61, 90, 159, 0.2);
       color: var(--accent-blue);
       padding: 4px 10px;
-      border-radius: 12px;
+      border-radius: 10px;
       font-size: 13px;
     }
 
@@ -286,13 +293,22 @@
       h1 { 
         font-size: 36px; 
       }
-      .container {
-        padding: 32px 16px;
+      .header-section {
+        padding: 40px 16px 0;
+      }
+      .messages-container {
+        padding: 24px 16px;
+      }
+      .composer-wrap {
+        padding: 0 16px 16px 16px;
+      }
+      .bubble {
+        max-width: 100%;
       }
     }
 
     ::-webkit-scrollbar {
-      width: 5px;
+      width: 6px;
     }
 
     ::-webkit-scrollbar-track {
@@ -300,32 +316,33 @@
     }
 
     ::-webkit-scrollbar-thumb {
-      background: rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.1);
       border-radius: 3px;
     }
 
     ::-webkit-scrollbar-thumb:hover {
-      background: rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.15);
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="title-with-icon">
-        <div class="icon">SP</div>
-        <h1>SinePatre</h1>
-      </div>
-      <p class="description">
-        A private guide designed for fatherless teens seeking support. Curated from a vetted database of resources, SinePatre listens to your situation and delivers personalized recommendations grounded in real organizations and practical next steps. Whether you're navigating grief, seeking mentorship, managing school stress, or processing identity questions, you'll find pathways forward that fit your life.
+  <div class="page">
+    <div class="header-section" id="header-section">
+      <h1>SinePatre</h1>
+      <p class="description-text">
+        A private guide designed for fatherless teens seeking support. Share what's on your mind, and I'll listen. When you're ready, I can point you toward real resources with practical next steps. This conversation stays between us.
       </p>
+    </div>
+
+    <div class="messages-container">
+      <div id="messages" class="messages" aria-live="polite" aria-label="Chat messages"></div>
     </div>
 
     <div class="composer-wrap">
       <div class="input-bar" role="group" aria-label="Message composer">
         <textarea
           id="input"
-          placeholder="What do you need help with?"
+          placeholder="What's on your mind?"
           rows="1"
           autocomplete="off"
           spellcheck="true"
@@ -335,39 +352,42 @@
         </button>
       </div>
     </div>
-
-    <main id="messages" class="messages" aria-live="polite" aria-label="Chat messages"></main>
   </div>
 
   <script>
     const messagesEl = document.getElementById('messages');
     const inputEl = document.getElementById('input');
     const sendBtn = document.getElementById('send-btn');
+    const headerSection = document.getElementById('header-section');
 
     let history = [];
+    let hasStarted = false;
 
     function autoGrowTextarea() {
       inputEl.style.height = 'auto';
       inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px';
     }
 
+    function collapseHeader() {
+      if (!hasStarted) {
+        hasStarted = true;
+        headerSection.classList.add('collapsed');
+      }
+    }
+
     function addMessage(role, content) {
-      messagesEl.classList.add('active');
-      
       const row = document.createElement('div');
       row.className = `msg-row ${role}`;
       
       const bubble = document.createElement('div');
       bubble.className = `bubble ${role}`;
+      bubble.textContent = content;
       
-      const text = document.createElement('div');
-      text.className = `msg-text ${role}`;
-      text.textContent = content;
-      
-      bubble.appendChild(text);
       row.appendChild(bubble);
       messagesEl.appendChild(row);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+      
+      const container = document.querySelector('.messages-container');
+      container.scrollTop = container.scrollHeight;
     }
 
     function addResources(resources) {
@@ -376,18 +396,15 @@
       const row = document.createElement('div');
       row.className = 'msg-row assistant';
       
-      const bubble = document.createElement('div');
-      bubble.className = 'bubble';
-      
       const block = document.createElement('div');
       block.className = 'resources-block';
 
       resources.forEach(r => {
-        const card = document.createElement('a');
-        card.className = 'resource-card';
-        card.href = r.url;
-        card.target = '_blank';
-        card.rel = 'noopener noreferrer';
+        const item = document.createElement('a');
+        item.className = 'resource-item';
+        item.href = r.url;
+        item.target = '_blank';
+        item.rel = 'noopener noreferrer';
         
         const titleDiv = document.createElement('div');
         titleDiv.className = 'resource-title';
@@ -397,8 +414,8 @@
         whyDiv.className = 'resource-why';
         whyDiv.textContent = r.why;
         
-        card.appendChild(titleDiv);
-        card.appendChild(whyDiv);
+        item.appendChild(titleDiv);
+        item.appendChild(whyDiv);
 
         if (Array.isArray(r.how_to_start) && r.how_to_start.length > 0) {
           const stepsDiv = document.createElement('div');
@@ -411,22 +428,24 @@
             stepsDiv.appendChild(pill);
           });
           
-          card.appendChild(stepsDiv);
+          item.appendChild(stepsDiv);
         }
         
-        block.appendChild(card);
+        block.appendChild(item);
       });
       
-      bubble.appendChild(block);
-      row.appendChild(bubble);
+      row.appendChild(block);
       messagesEl.appendChild(row);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+      
+      const container = document.querySelector('.messages-container');
+      container.scrollTop = container.scrollHeight;
     }
 
     async function send() {
       const msg = inputEl.value.trim();
       if (!msg) return;
       
+      collapseHeader();
       addMessage('user', msg);
       inputEl.value = '';
       inputEl.style.height = 'auto';
@@ -449,7 +468,7 @@
         const data = await res.json();
         
         if (data.error) {
-          addMessage('assistant', `Error: ${data.error}`);
+          addMessage('assistant', `Something went wrong. Please try again.`);
         } else {
           if (data.mode === 'safety') {
             addMessage('assistant', data.intro);
