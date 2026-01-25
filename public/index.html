@@ -37,9 +37,7 @@
       line-height: 1.6;
     }
 
-    .app {
-      min-height: 100vh;
-    }
+    .app { min-height: 100vh; }
 
     .center {
       width: min(860px, 100%);
@@ -47,7 +45,6 @@
       padding: 0 20px;
     }
 
-    /* Landing: centered, compact */
     .landing {
       display: flex;
       flex-direction: column;
@@ -74,16 +71,13 @@
       line-height: 1.85;
     }
 
-    /* Chat state: minimal top padding */
     .chat {
       display: none;
       padding-top: 12px;
       padding-bottom: 140px;
     }
 
-    .chat.active {
-      display: block;
-    }
+    .chat.active { display: block; }
 
     .messages {
       display: flex;
@@ -131,7 +125,6 @@
 
     .bubble.assistant strong { color: rgba(255,255,255,0.95); }
 
-    /* Fixed composer */
     .composer-shell {
       position: fixed;
       left: 0;
@@ -275,9 +268,7 @@
       z-index: 10;
     }
 
-    .help-btn-inline:hover::after {
-      opacity: 1;
-    }
+    .help-btn-inline:hover::after { opacity: 1; }
 
     .status {
       margin-top: 10px;
@@ -300,7 +291,6 @@
 <body>
   <div class="app">
     <div class="center">
-      <!-- Landing view -->
       <section id="landing" class="landing">
         <h1 class="title">SinePatre</h1>
         <p class="desc">
@@ -309,13 +299,11 @@
         </p>
       </section>
 
-      <!-- Chat view -->
       <section id="chat" class="chat" aria-label="Chat">
         <div id="messages" class="messages" aria-live="polite" aria-label="Chat messages"></div>
       </section>
     </div>
 
-    <!-- Composer -->
     <div class="composer-shell">
       <div class="center">
         <div class="input-bar" role="group" aria-label="Message composer">
@@ -345,7 +333,6 @@
     const inputEl = document.getElementById('input');
     const sendBtn = document.getElementById('send-btn');
     const statusEl = document.getElementById('status');
-    const helpBtnInline = document.getElementById('help-btn-inline');
     const composerShell = document.querySelector('.composer-shell');
 
     let history = [];
@@ -370,7 +357,7 @@
 
       const bubble = document.createElement('div');
       bubble.className = `bubble ${role}`;
-      bubble.textContent = content;
+      bubble.textContent = String(content || '');
 
       row.appendChild(bubble);
       messagesEl.appendChild(row);
@@ -383,12 +370,29 @@
       statusEl.textContent = text || '';
     }
 
+    function normalizeToText(x) {
+      if (typeof x === 'string') return x;
+      if (!x) return '';
+      if (typeof x === 'number' || typeof x === 'boolean') return String(x);
+      if (typeof x === 'object') {
+        if (typeof x.text === 'string') return x.text;
+        if (typeof x.content === 'string') return x.content;
+        try { return JSON.stringify(x); } catch { return String(x); }
+      }
+      return String(x);
+    }
+
     function formatParagraphResponse(data) {
       const parts = [];
-      if (data && data.intro) parts.push(String(data.intro).trim());
+      if (data && data.intro) parts.push(normalizeToText(data.intro).trim());
+
       if (Array.isArray(data.paragraphs) && data.paragraphs.length) {
-        parts.push(data.paragraphs.map(p => String(p).trim()).join("\n\n"));
+        const cleaned = data.paragraphs
+          .map(p => normalizeToText(p).trim())
+          .filter(Boolean);
+        if (cleaned.length) parts.push(cleaned.join("\n\n"));
       }
+
       return parts.filter(Boolean).join("\n\n").trim();
     }
 
@@ -424,14 +428,12 @@
 
         if (!res.ok || data.error) {
           const detail = data && (data.detail || data.hint) ? `\n\n${data.detail || data.hint}` : '';
-          pendingRow.querySelector('.bubble').textContent =
-            `Something went wrong on the server.${detail}`;
+          pendingRow.querySelector('.bubble').textContent = `Something went wrong.${detail}`;
           setStatus('');
         } else {
           const text = formatParagraphResponse(data) || 'I did not get a usable response. Try again.';
           pendingRow.querySelector('.bubble').textContent = text;
           setStatus('');
-
           history.push({ role: 'assistant', content: text });
         }
       } catch (err) {
