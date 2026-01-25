@@ -2,7 +2,9 @@
 //
 // Goals:
 // - Always respond (better error surfacing)
-// - Smarter, more detailed, more resource-grounded
+// - Slightly conversational by default
+// - ONLY give programs when user explicitly asks for resources/recommendations
+// - Smarter, more detailed, more resource-grounded when in resource mode
 // - Far fewer clarifying questions
 // - No generic filler intros
 // - Rephrase sheet content (do NOT repeat verbatim)
@@ -16,6 +18,9 @@
 const MAX_MESSAGE_LENGTH = 1500;
 const MAX_HISTORY_ITEMS = 30;
 
+// More expensive / better model
+const OPENAI_MODEL = "gpt-4o";
+
 const SAFETY_REGEX = [
   /\b(suicide|kill myself|end my life|end it all)\b/i,
   /\b(self[- ]?harm|cut myself|cutting|self.?injur)\b/i,
@@ -24,34 +29,37 @@ const SAFETY_REGEX = [
   /\b(overdose|poison|hang)\b/i,
 ];
 
+// Only treat as resource intent when user explicitly asks
 const RESOURCE_REQUEST_KEYWORDS = [
+  "resources",
   "resource",
-  "help",
   "recommend",
-  "option",
+  "recommendation",
+  "options",
   "program",
-  "support",
-  "organization",
-  "where can",
-  "how do i",
-  "do you have",
-  "know any",
-  "suggest",
-  "idea",
-  "what would help",
-  "what can",
-  "show me",
-  "find me",
-  "who can",
-  "hotline",
-  "therapy",
-  "mentor",
+  "programs",
   "support group",
-  "group",
+  "support-group",
+  "group therapy",
+  "therapy",
+  "therapist",
   "counseling",
+  "counsellor",
+  "mentor",
+  "mentorship",
+  "hotline",
+  "helpline",
+  "crisis line",
+  "text line",
+  "where can i get help",
+  "where do i go",
+  "who can i talk to",
+  "find me",
+  "show me",
+  "give me",
+  "list",
 ];
 
-// If `fetch` is not available (older Node runtimes), fall back to undici.
 async function ensureFetch() {
   if (typeof globalThis.fetch === "function") return;
   const undici = await import("undici");
@@ -83,19 +91,38 @@ function normalize(text) {
     .trim();
 }
 
-function isSimpleGreeting(lower) {
-  const t = normalize(lower);
-  return t === "hey" || t === "hi" || t === "hello" || t === "yo" || t === "sup";
+function isSimpleGreeting(message) {
+  const t = normalize(message);
+  return (
+    t === "hey" ||
+    t === "hi" ||
+    t === "hello" ||
+    t === "yo" ||
+    t === "sup" ||
+    t === "hey there"
+  );
 }
 
-function isAskingForResources(message) {
-  const lower = String(message || "").toLowerCase().trim();
-  if (!lower) return false;
-  if (isSimpleGreeting(lower)) return false;
+function looksLikeSmallTalk(message) {
+  const t = normalize(message);
+  if (isSimpleGreeting(t)) return true;
+  // Common “check-in” phrases that should never trigger resources
+  if (
+    t.includes("how are you") ||
+    t.includes("hows it going") ||
+    t.includes("what's up") ||
+    t.includes("whats up") ||
+    t.includes("good morning") ||
+    t.includes("good afternoon") ||
+    t.includes("good evening")
+  ) {
+    return true;
+  }
+  return false;
+}
 
-  // Product goal: mostly find resources. If they type a real message, treat as resource intent.
-  if (lower.length >= 12) return true;
-
+function userExplicitlyAskedForResources(message) {
+  const lower = String(message || "").toLowerCase();
   return RESOURCE_REQUEST_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
@@ -242,7 +269,7 @@ function sanitizeHistory(history) {
     .slice(-MAX_HISTORY_ITEMS);
 }
 
-async function openaiJSON(apiKey, messages, { timeoutMs = 20000 } = {}) {
+async function openaiJSON(apiKey, messages, { timeoutMs = 25000 } = {}) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -255,7 +282,7 @@ async function openaiJSON(apiKey, messages, { timeoutMs = 20000 } = {}) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: OPENAI_MODEL,
         temperature: 0.35,
         response_format: { type: "json_object" },
         messages,
@@ -302,7 +329,6 @@ function safeString(x) {
 }
 
 function fallbackParagraphFromFields(r) {
-  // Only used if OpenAI fails. Keeps it clean (no "How to start", no weird labels).
   const bits = [];
   if (r.description) bits.push(r.description);
   if (r.best_for) bits.push(`Best for: ${r.best_for}.`);
@@ -342,7 +368,7 @@ export default async function handler(req, res) {
   const history = sanitizeHistory(req.body?.history);
   const sophisticated = wantsSophisticatedStyle(message);
 
-  // Safety gate (no "How to start")
+  // Safety gate
   if (triggeredSafety(message)) {
     return send(req, res, 200, {
       mode: "safety",
@@ -353,7 +379,6 @@ export default async function handler(req, res) {
         "Teen Line\nhttps://teenline.org\nPeer support for teens, with supervised listeners.",
         "Childhelp Hotline\nhttps://www.childhelp.org/hotline/\nSupport if you are dealing with abuse or feeling unsafe.",
       ],
-      // Backwards compatibility: keep resources, but remove how_to_start entirely.
       resources: [
         { title: "988 Suicide & Crisis Lifeline", url: "https://988lifeline.org", why: "" },
         { title: "Crisis Text Line", url: "https://www.crisistextline.org", why: "" },
@@ -363,24 +388,26 @@ export default async function handler(req, res) {
     });
   }
 
-  const askingForResources = isAskingForResources(message);
+  // Key behavior change:
+  // - Only show resources when user explicitly asks
+  // - Otherwise be conversational, and offer to pull resources if they want
+  const explicitResourceAsk = userExplicitlyAskedForResources(message);
 
   try {
-    // Conversation mode only for greetings (keep it short and non-chatty)
-    if (!askingForResources) {
+    // Pure greetings / small talk always stay conversational
+    if (looksLikeSmallTalk(message) && !explicitResourceAsk) {
       const convo = await openaiJSON(apiKey, [
         {
           role: "system",
           content:
             "You are SinePatre.\n" +
-            "Tone: calm, measured, mature, not overly friendly.\n" +
+            "Tone: calm, measured, mature, slightly conversational.\n" +
             "Do not give medical advice.\n" +
-            "Do not mention external resources unless the user asks for resources.\n" +
+            "Do not list resources unless the user explicitly asks for resources.\n" +
             "Output JSON only: { \"response\": string }\n" +
             "Rules:\n" +
-            "- 2 to 4 sentences.\n" +
-            "- Ask at most one question.\n" +
-            "- No filler, no generic speeches.\n",
+            "- 1 to 3 sentences.\n" +
+            "- No generic speeches.\n",
         },
         ...history,
         { role: "user", content: message },
@@ -388,27 +415,58 @@ export default async function handler(req, res) {
 
       return send(req, res, 200, {
         mode: "conversation",
-        intro: String(convo?.response || "Hey. What kind of support are you looking for?").trim(),
+        intro: String(convo?.response || "Hey. What’s on your mind?").trim(),
         paragraphs: [],
         resources: [],
       });
     }
 
-    // Resource mode
+    // If they did not explicitly ask for resources, stay conversational.
+    // This includes “describing their situation”. The bot should respond, then offer to pull resources if wanted.
+    if (!explicitResourceAsk) {
+      const convo = await openaiJSON(apiKey, [
+        {
+          role: "system",
+          content:
+            "You are SinePatre.\n" +
+            "Tone: calm, measured, mature, slightly conversational.\n" +
+            "Goal: respond thoughtfully to what the user said.\n" +
+            "Hard rules:\n" +
+            "- Do not list resources unless the user explicitly asks for resources.\n" +
+            "- Do not give medical advice.\n" +
+            "- Do not be overly cheerful or overly friendly.\n" +
+            "Output JSON only: { \"response\": string }\n" +
+            "Rules:\n" +
+            "- 4 to 7 sentences.\n" +
+            "- Be specific and perceptive.\n" +
+            "- End with ONE low-pressure offer like: 'If you want, I can also pull a few resources from the database.'\n",
+        },
+        ...history,
+        { role: "user", content: message },
+      ]);
+
+      return send(req, res, 200, {
+        mode: "conversation",
+        intro: String(convo?.response || "I’m here. Tell me what’s going on, and if you want I can pull a few resources from the database.").trim(),
+        paragraphs: [],
+        resources: [],
+      });
+    }
+
+    // Resource mode (explicit ask)
     const resources = await loadResources(csvUrl);
 
-    // Lightweight classification (fewer clarifying questions)
+    // Classification (still lightweight, no over-clarifying)
     const classification = await openaiJSON(apiKey, [
       {
         role: "system",
         content:
-          "Classify what support the user is seeking.\n" +
+          "Classify what support the user is seeking so we can pick the best database matches.\n" +
           "Output JSON only:\n" +
-          '{ "need_tags": string[], "urgency": "low|medium|high", "needs_clarification": boolean, "clarifying_question": string|null }\n' +
+          '{ "need_tags": string[], "urgency": "low|medium|high" }\n' +
           "Rules:\n" +
           "- Tags: therapy, support-group, mentor, grief, school-stress, anxiety, depression, family, identity, talk-now.\n" +
-          "- needs_clarification=true ONLY if it is genuinely impossible to choose.\n" +
-          "- If needs_clarification=true, ask ONE short question.\n" +
+          "- Do not ask questions.\n" +
           "- Do not give advice.\n",
       },
       ...history,
@@ -431,53 +489,29 @@ export default async function handler(req, res) {
     }
 
     const limit = 3;
-
-    // If nothing scores, return top few anyway, and keep it moving.
     const top = (ranked.length ? ranked.slice(0, limit).map((x) => x.r) : resources.slice(0, limit));
 
-    // Only ask a clarifying question if the match is truly weak and ambiguity is real.
-    const topScore = ranked[0]?.s || 0;
-    const secondScore = ranked[1]?.s || 0;
-    const weak = topScore < 8;
-    const close = Math.abs(topScore - secondScore) <= 2;
-
-    if (classification.needs_clarification && weak && close && classification.clarifying_question) {
-      return send(req, res, 200, {
-        mode: "conversation",
-        intro: String(classification.clarifying_question).trim(),
-        paragraphs: [],
-        resources: [],
-      });
-    }
-
-    // Main improvement:
-    // - Rephrase everything in the assistant’s own words
-    // - Keep it grounded in the sheet fields
-    // - No "How to start"
-    // - No generic “mental health resources are important” preambles
-    // - No weird phrases like "direct object"
     const rewrite = await openaiJSON(apiKey, [
       {
         role: "system",
         content:
           "You are SinePatre, a resource navigator for fatherless teens.\n" +
-          "The user asked for resources.\n\n" +
+          "The user explicitly asked for resources.\n\n" +
           "Hard rules:\n" +
           "- Use ONLY the provided resource fields. Do not invent facts.\n" +
           "- Rephrase the content. Do NOT quote or repeat the sheet text verbatim.\n" +
           "- Do NOT write generic educational preambles.\n" +
           "- Do NOT include any 'How to start' section.\n" +
-          "- Do NOT use the phrase 'direct object' or any grammar talk.\n" +
-          "- Be mature and astute, not overly friendly.\n\n" +
+          "- Be mature, astute, and slightly conversational.\n\n" +
           "Output JSON only: { \"intro\": string, \"paragraphs\": string[] }\n\n" +
           "Format rules:\n" +
-          "- intro: 2 to 3 sentences. Specific to the user's message. No question.\n" +
-          "- paragraphs: 1 to 3 items, one per resource.\n" +
+          "- intro: 2 sentences, specific to the user's request.\n" +
+          "- paragraphs: exactly 3 items (one per resource).\n" +
           "- Each paragraph MUST be exactly:\n" +
           "  Line 1: Resource name\n" +
           "  Line 2: URL\n" +
-          "  Then 4 to 6 sentences explaining fit using description/best_for/when_to_use/not_for/fatherlessness_connection.\n" +
-          "- No bullet lists.\n",
+          "  Then 4 to 7 sentences explaining fit using description/best_for/when_to_use/not_for/fatherlessness_connection.\n" +
+          "- No bullets.\n",
       },
       ...history,
       {
@@ -503,19 +537,14 @@ export default async function handler(req, res) {
     const paragraphs = Array.isArray(rewrite?.paragraphs) ? rewrite.paragraphs.slice(0, limit) : [];
     const intro = String(rewrite?.intro || "").trim();
 
-    // If OpenAI returns something unusable, fall back to deterministic content (still no "How to start").
     const safeParagraphs = paragraphs.length ? paragraphs : top.map(fallbackParagraphFromFields);
     const safeIntro =
-      intro ||
-      (ranked.length
-        ? "Based on what you wrote, these are the closest matches in the database."
-        : "I am not seeing a tight match from the database yet, but these are broadly relevant starting points.");
+      intro || "Here are three options from the database that best match what you asked for.";
 
     return send(req, res, 200, {
       mode: "recommendations_paragraphs",
       intro: safeIntro,
       paragraphs: safeParagraphs,
-      // Backwards compatibility: keep resources, but remove how_to_start entirely.
       resources: top.map((r) => ({ title: r.title, url: r.url, why: "" })),
     });
   } catch (err) {
