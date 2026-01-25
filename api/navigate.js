@@ -5,7 +5,7 @@
 // - Slightly conversational by default
 // - ONLY give programs when user explicitly asks for resources/recommendations
 // - Smarter, more detailed, more resource-grounded when in resource mode
-// - Far fewer clarifying questions
+// - Use conversation context so resource picks match what was discussed
 // - No generic filler intros
 // - Rephrase sheet content (do NOT repeat verbatim)
 // - Remove "How to start" everywhere
@@ -93,20 +93,12 @@ function normalize(text) {
 
 function isSimpleGreeting(message) {
   const t = normalize(message);
-  return (
-    t === "hey" ||
-    t === "hi" ||
-    t === "hello" ||
-    t === "yo" ||
-    t === "sup" ||
-    t === "hey there"
-  );
+  return t === "hey" || t === "hi" || t === "hello" || t === "yo" || t === "sup" || t === "hey there";
 }
 
 function looksLikeSmallTalk(message) {
   const t = normalize(message);
   if (isSimpleGreeting(t)) return true;
-  // Common “check-in” phrases that should never trigger resources
   if (
     t.includes("how are you") ||
     t.includes("hows it going") ||
@@ -131,7 +123,8 @@ function tokenize(text) {
     "the","and","or","but","if","to","of","in","on","for","with","is","are",
     "was","were","be","been","being","i","me","my","you","your","we","they",
     "this","that","it","a","an","about","from","by","at","as","im","i'm",
-    "dont","don't","cant","can't","so","just","like","really",
+    "dont","don't","cant","can't","so","just","like","really","can","could","would",
+    "please","help","need","want","get","give","show","tell","also",
   ]);
 
   return normalize(text)
@@ -243,15 +236,18 @@ function isCrisisResource(resource) {
   );
 }
 
-function scoreResource(resource, queryTokens, tagTokens, urgency) {
+function scoreResource(resource, queryTokens, contextTokens, tagTokens, urgency) {
   const haystack = tokenize(
     `${resource.title} ${resource.description} ${resource.best_for} ${resource.fatherlessness_connection} ${resource.when_to_use} ${resource.not_for}`
   );
 
   let score = 0;
+
+  // Highest weight: explicit ask text (what they asked for right now)
   for (const w of haystack) {
-    if (queryTokens.includes(w)) score += 3;
-    if (tagTokens.includes(w)) score += 5;
+    if (queryTokens.includes(w)) score += 4;
+    if (tagTokens.includes(w)) score += 6;
+    if (contextTokens.includes(w)) score += 2; // softer weight for prior context
   }
 
   const fatherText = (resource.fatherlessness_connection || "").toLowerCase();
@@ -267,6 +263,14 @@ function sanitizeHistory(history) {
     .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
     .map((m) => ({ role: m.role, content: String(m.content).slice(0, 1200) }))
     .slice(-MAX_HISTORY_ITEMS);
+}
+
+function recentContextText(history, maxTurns = 8) {
+  const slice = Array.isArray(history) ? history.slice(-maxTurns) : [];
+  return slice
+    .map((m) => `${m.role}: ${m.content}`)
+    .join("\n")
+    .slice(0, 4000);
 }
 
 async function openaiJSON(apiKey, messages, { timeoutMs = 25000 } = {}) {
@@ -336,7 +340,7 @@ function fallbackParagraphFromFields(r) {
   if (r.not_for) bits.push(`Not for: ${r.not_for}.`);
   if (r.fatherlessness_connection) bits.push(`Connection to fatherlessness: ${r.fatherlessness_connection}.`);
 
-  return `${r.title}\n${r.url}\n${bits.join(" ").replace(/\s+/g, " ").trim()}`.trim();
+  return `${r.title}: ${r.url}\n${bits.join(" ").replace(/\s+/g, " ").trim()}`.trim();
 }
 
 export default async function handler(req, res) {
@@ -374,10 +378,10 @@ export default async function handler(req, res) {
       mode: "safety",
       intro: "You deserve immediate support. Please contact one of these right now.",
       paragraphs: [
-        "988 Suicide & Crisis Lifeline\nhttps://988lifeline.org\nFree, 24/7 support in the U.S. by phone or text.",
-        "Crisis Text Line\nhttps://www.crisistextline.org\n24/7 crisis support by text.",
-        "Teen Line\nhttps://teenline.org\nPeer support for teens, with supervised listeners.",
-        "Childhelp Hotline\nhttps://www.childhelp.org/hotline/\nSupport if you are dealing with abuse or feeling unsafe.",
+        "988 Suicide & Crisis Lifeline: https://988lifeline.org\nFree, 24/7 support in the U.S. by phone or text.",
+        "Crisis Text Line: https://www.crisistextline.org\n24/7 crisis support by text.",
+        "Teen Line: https://teenline.org\nPeer support for teens, with supervised listeners.",
+        "Childhelp Hotline: https://www.childhelp.org/hotline/\nSupport if you are dealing with abuse or feeling unsafe.",
       ],
       resources: [
         { title: "988 Suicide & Crisis Lifeline", url: "https://988lifeline.org", why: "" },
@@ -388,9 +392,6 @@ export default async function handler(req, res) {
     });
   }
 
-  // Key behavior change:
-  // - Only show resources when user explicitly asks
-  // - Otherwise be conversational, and offer to pull resources if they want
   const explicitResourceAsk = userExplicitlyAskedForResources(message);
 
   try {
@@ -402,7 +403,6 @@ export default async function handler(req, res) {
           content:
             "You are SinePatre.\n" +
             "Tone: calm, measured, mature, slightly conversational.\n" +
-            "Do not give medical advice.\n" +
             "Do not list resources unless the user explicitly asks for resources.\n" +
             "Output JSON only: { \"response\": string }\n" +
             "Rules:\n" +
@@ -422,7 +422,6 @@ export default async function handler(req, res) {
     }
 
     // If they did not explicitly ask for resources, stay conversational.
-    // This includes “describing their situation”. The bot should respond, then offer to pull resources if wanted.
     if (!explicitResourceAsk) {
       const convo = await openaiJSON(apiKey, [
         {
@@ -430,16 +429,16 @@ export default async function handler(req, res) {
           content:
             "You are SinePatre.\n" +
             "Tone: calm, measured, mature, slightly conversational.\n" +
-            "Goal: respond thoughtfully to what the user said.\n" +
+            "Goal: respond thoughtfully to what the user said, using the prior conversation for context.\n" +
             "Hard rules:\n" +
             "- Do not list resources unless the user explicitly asks for resources.\n" +
             "- Do not give medical advice.\n" +
-            "- Do not be overly cheerful or overly friendly.\n" +
+            "- Do not be overly cheerful.\n" +
             "Output JSON only: { \"response\": string }\n" +
             "Rules:\n" +
             "- 4 to 7 sentences.\n" +
-            "- Be specific and perceptive.\n" +
-            "- End with ONE low-pressure offer like: 'If you want, I can also pull a few resources from the database.'\n",
+            "- Be specific and context-aware.\n" +
+            "- End with ONE low-pressure offer like: 'If you want, I can pull a few resources from the database.'\n",
         },
         ...history,
         { role: "user", content: message },
@@ -456,29 +455,43 @@ export default async function handler(req, res) {
     // Resource mode (explicit ask)
     const resources = await loadResources(csvUrl);
 
-    // Classification (still lightweight, no over-clarifying)
+    // Use current message + recent context to decide tags and ranking
+    const contextText = recentContextText(history, 10);
+
     const classification = await openaiJSON(apiKey, [
       {
         role: "system",
         content:
           "Classify what support the user is seeking so we can pick the best database matches.\n" +
+          "Use BOTH the current request and the prior conversation context.\n" +
           "Output JSON only:\n" +
-          '{ "need_tags": string[], "urgency": "low|medium|high" }\n' +
+          '{ "need_tags": string[], "urgency": "low|medium|high", "focus_summary": string }\n' +
           "Rules:\n" +
-          "- Tags: therapy, support-group, mentor, grief, school-stress, anxiety, depression, family, identity, talk-now.\n" +
+          "- Tags: therapy, support-group, mentor, grief, school-stress, anxiety, depression, family, identity, talk-now, practical-life, relationships, confidence.\n" +
+          "- focus_summary: 6 to 14 words describing what the user actually wants right now.\n" +
           "- Do not ask questions.\n" +
           "- Do not give advice.\n",
       },
       ...history,
-      { role: "user", content: message },
+      {
+        role: "user",
+        content: safeString({
+          current_request: message,
+          prior_context: contextText,
+        }),
+      },
     ]);
 
     const urgency = String(classification.urgency || "low").toLowerCase();
     const queryTokens = tokenize(message);
+
+    // Context tokens: give “tie a tie” and similar things influence
+    const contextTokens = tokenize(contextText);
+
     const tagTokens = tokenize((classification.need_tags || []).join(" "));
 
     const rankedAll = resources
-      .map((r) => ({ r, s: scoreResource(r, queryTokens, tagTokens, urgency) }))
+      .map((r) => ({ r, s: scoreResource(r, queryTokens, contextTokens, tagTokens, urgency) }))
       .filter((x) => x.s > 0)
       .sort((a, b) => b.s - a.s);
 
@@ -496,7 +509,8 @@ export default async function handler(req, res) {
         role: "system",
         content:
           "You are SinePatre, a resource navigator for fatherless teens.\n" +
-          "The user explicitly asked for resources.\n\n" +
+          "The user explicitly asked for resources.\n" +
+          "You must make the recommendations relevant to the prior conversation context.\n\n" +
           "Hard rules:\n" +
           "- Use ONLY the provided resource fields. Do not invent facts.\n" +
           "- Rephrase the content. Do NOT quote or repeat the sheet text verbatim.\n" +
@@ -505,11 +519,10 @@ export default async function handler(req, res) {
           "- Be mature, astute, and slightly conversational.\n\n" +
           "Output JSON only: { \"intro\": string, \"paragraphs\": string[] }\n\n" +
           "Format rules:\n" +
-          "- intro: 2 sentences, specific to the user's request.\n" +
+          "- intro: 2 sentences, specific to the user's request and context (no question).\n" +
           "- paragraphs: exactly 3 items (one per resource).\n" +
-          "- Each paragraph MUST be exactly:\n" +
-          "  Line 1: Resource name\n" +
-          "  Line 2: URL\n" +
+          "- Each paragraph MUST be:\n" +
+          "  Line 1: 'Resource name: URL'\n" +
           "  Then 4 to 7 sentences explaining fit using description/best_for/when_to_use/not_for/fatherlessness_connection.\n" +
           "- No bullets.\n",
       },
@@ -517,10 +530,12 @@ export default async function handler(req, res) {
       {
         role: "user",
         content: safeString({
-          user_message: message,
+          current_request: message,
+          focus_summary: classification.focus_summary || "",
           sophistication: sophisticated ? "high" : "normal",
           urgency,
           need_tags: classification.need_tags || [],
+          prior_context: contextText,
           resources: top.map((r) => ({
             title: r.title,
             url: r.url,
@@ -538,8 +553,7 @@ export default async function handler(req, res) {
     const intro = String(rewrite?.intro || "").trim();
 
     const safeParagraphs = paragraphs.length ? paragraphs : top.map(fallbackParagraphFromFields);
-    const safeIntro =
-      intro || "Here are three options from the database that best match what you asked for.";
+    const safeIntro = intro || "Here are three options from the database that match what you asked for.";
 
     return send(req, res, 200, {
       mode: "recommendations_paragraphs",
