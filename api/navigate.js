@@ -67,7 +67,6 @@ function isAskingForResources(message) {
   const lower = String(message || "").toLowerCase().trim();
   if (!lower) return false;
 
-  // Treat most substantive messages as resource-intent, unless it is clearly just a greeting.
   if (isSimpleGreeting(lower)) return false;
   if (lower.length >= 18) return true;
 
@@ -95,7 +94,6 @@ function tokenize(text) {
     .filter((w) => w.length > 2 && !stop.has(w));
 }
 
-// Minimal CSV parser (handles quotes)
 function parseCSV(csv) {
   const rows = [];
   let row = [];
@@ -328,7 +326,7 @@ export default async function handler(req, res) {
     return send(res, 200, {
       mode: "safety",
       intro:
-        "I am really glad you reached out. You deserve immediate support. Here are options you can use right now.",
+        "You deserve immediate support. Reach out to one of these resources right now—they are trained to help.",
       paragraphs: [
         "988 Suicide & Crisis Lifeline\nhttps://988lifeline.org\nHow to start: Call, Text",
         "Crisis Text Line\nhttps://www.crisistextline.org\nHow to start: Text",
@@ -353,20 +351,21 @@ export default async function handler(req, res) {
         {
           role: "system",
           content:
-            "You are SinePatre. Be calm, direct, and slightly less friendly than a typical chatbot.\n" +
+            "You are SinePatre. Be calm, direct, measured, and not overly friendly.\n" +
             "You are not a therapist. Do not give medical advice. Do not mention external resources unless asked.\n\n" +
             "Output JSON only: { \"response\": string }\n\n" +
             "Rules:\n" +
-            "- If it is a greeting, reply with one short greeting and one short prompt.\n" +
-            "- Otherwise: 1 paragraph, 2 to 4 sentences.\n" +
-            "- Ask a question only about half the time (only if it truly helps).\n" +
-            "- Sound more mature if the user asks for sophistication.\n",
+            "- If it is a greeting, reply with one short greeting and one direct prompt.\n" +
+            "- Otherwise: 1 to 2 paragraphs, 4 to 6 sentences total, substantive and probing.\n" +
+            "- Rarely ask questions. Instead, make observations that show you understand.\n" +
+            "- Sound more mature, sophisticated, and less patronizing if user requests it.\n" +
+            "- Be astute and perceptive in your responses.\n",
         },
         ...history,
         { role: "user", content: message },
       ]);
 
-      const fallback = isSimpleGreeting(message) ? "Hey. What are you looking for right now?" : "I hear you. What feels most pressing?";
+      const fallback = isSimpleGreeting(message) ? "What's on your mind right now?" : "I hear you. Tell me more about what you're dealing with.";
       return send(res, 200, {
         mode: "conversation",
         intro: String(convo?.response || fallback).trim(),
@@ -416,8 +415,8 @@ export default async function handler(req, res) {
         mode: "no_match",
         intro:
           sophisticated
-            ? "I can help, but I am not seeing a strong match from the database yet. Tell me the closest fit: therapy, a support group, mentorship, or someone to talk to."
-            : "I can help, but I am not seeing a strong match yet. Are you looking for therapy, a support group, mentorship, or someone to talk to?",
+            ? "I can help, but I need more specificity. What form of support would be most useful—therapy, a support group, mentorship, or someone to talk to?"
+            : "I can help, but I need to understand better. Are you looking for therapy, a support group, mentorship, or someone to talk to?",
         paragraphs: [],
         resources: [],
       });
@@ -445,15 +444,15 @@ export default async function handler(req, res) {
           "Write in paragraphs (no cards, no bullet lists).\n\n" +
           "Output JSON only: { \"intro\": string, \"paragraphs\": string[] }\n\n" +
           "Rules:\n" +
-          "- intro: 2 to 3 sentences, direct, not overly friendly.\n" +
+          "- intro: 2 to 3 sentences, direct, measured, substantive.\n" +
           "- paragraphs: 1 to 3 paragraphs total, one per resource.\n" +
           "- Each resource paragraph must include:\n" +
           "  (a) the resource name on the first line,\n" +
           "  (b) the URL on the second line,\n" +
-          "  (c) a tight explanation (4 to 6 sentences) grounded in description/best_for/when_to_use/fatherlessness_connection/not_for,\n" +
+          "  (c) a thorough explanation (5 to 8 sentences) grounded in description/best_for/when_to_use/fatherlessness_connection/not_for,\n" +
           "  (d) a final line exactly: 'How to start: X, Y, Z' using only Call, Text, Form, Walk-in, Referral (2 to 4 items).\n" +
           "- Ask zero questions in this mode.\n" +
-          "- If user requested sophistication, write more maturely.\n",
+          "- Write with sophistication, maturity, and astuteness.\n",
       },
       ...history,
       {
@@ -488,14 +487,13 @@ export default async function handler(req, res) {
 
     return send(res, 200, {
       mode: "recommendations_paragraphs",
-      intro: String(response.intro || "Here are a few options from the database that match what you asked for.").trim(),
+      intro: String(response.intro || "Here are resources tailored to what you need.").trim(),
       paragraphs: clippedParas,
       resources: outResources,
     });
   } catch (err) {
     const msg = String(err?.message || err);
 
-    // Return a useful error to the UI (so you can actually debug it)
     return send(res, 500, {
       error: "Server error",
       detail: msg.slice(0, 600),
