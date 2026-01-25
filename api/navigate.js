@@ -1,7 +1,7 @@
 // api/navigate.js - SinePatre Resource Navigator
 // Smart, conversational AI that listens first, recommends only when asked
-// Updated: more conversational + astute, more sophisticated when prompted,
-// faster-feeling responses (tighter prompts), and returns PARAGRAPHS (no cards).
+// Fixed: OpenAI call + better error visibility + robust JSON parsing + fetch fallback.
+// Returns PARAGRAPHS (no cards).
 
 const MAX_MESSAGE_LENGTH = 1500;
 const MAX_HISTORY_ITEMS = 30;
@@ -20,6 +20,14 @@ const RESOURCE_REQUEST_KEYWORDS = [
   "suggest", "idea", "what would help", "what can", "show me", "find me",
   "who can", "hotline", "therapy", "mentor", "support group"
 ];
+
+// If `fetch` is not available (some runtimes), fall back to undici.
+async function ensureFetch() {
+  if (typeof globalThis.fetch === "function") return;
+  const undici = await import("undici");
+  globalThis.fetch = undici.fetch;
+}
+void ensureFetch();
 
 function setCors(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -110,7 +118,10 @@ async function loadResources(csvUrl) {
   if (CACHE.items && now - CACHE.at < CACHE.ttlMs) return CACHE.items;
 
   const r = await fetch(csvUrl);
-  if (!r.ok) throw new Error("sheet_fetch_failed");
+  if (!r.ok) {
+    const t = await r.text().catch(() => "");
+    throw new Error(`sheet_fetch_failed:${r.status}:${t.slice(0, 220)}`);
+  }
   const text = await r.text();
 
   const rows = parseCSV(text);
@@ -189,30 +200,6 @@ function sanitizeHistory(history) {
     .slice(-MAX_HISTORY_ITEMS);
 }
 
-async function openaiJSON(apiKey, messages) {
-  const r = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      // Lower temp improves speed/consistency and reduces rambling.
-      temperature: 0.45,
-      response_format: { type: "json_object" },
-      messages,
-    }),
-  });
-
-  if (!r.ok) throw new Error("openai_call_failed");
-
-  const j = await r.json();
-  const content = j?.choices?.[0]?.message?.content;
-  if (!content) throw new Error("openai_empty");
-  return JSON.parse(content);
-}
-
 function buildHowToStart(resource) {
   const text = `${resource.when_to_use}\n${resource.description}\n${resource.best_for}`.toLowerCase();
   const steps = [];
@@ -243,7 +230,111 @@ function isSimpleGreeting(message) {
   return t === "hey" || t === "hi" || t === "hello" || t === "yo" || t === "sup";
 }
 
-export default async function handler(req, res) {
+// Extract text from Responses API result robustly
+function extractResponsesText(j) {
+  if (typeof j?.output_text === "string" && j.output_text.trim()) return j.output_text;
+
+  const out = Array.isArray(j?.output) ? j.output : [];
+  const chunks = [];
+  for (const item of out) {
+    const content = Array.isArray(item?.content) ? item.content : [];
+    for (const c of content) {
+      if (c && typeof c.text === "string") chunks.push(c.text);
+      if (c && typeof c?.text?.value === "string") chunks.push(c.text.value);
+    }
+  }
+  return chunks.join("\n").trim();
+}
+
+function safeJsonParse(str) {
+  try {
+    return { ok: true, value: JSON.parse(str) };
+  } catch {
+    return { ok: false, value: null };
+  }
+}
+
+// OpenAI call: uses Responses API JSON mode, with a fallback to Chat Completions JSON mode.
+async function openaiJSON(apiKey, messages) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
+
+  const headers = {
+    Authorization: `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+  };
+
+  try {
+    // Primary: Responses API (recommended)
+    const r = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        input: messages,
+        // JSON mode (not schema), fast + strict JSON
+        text: { format: { type: "json_object" } },
+        temperature: 0.45,
+      }),
+    });
+
+    const raw = await r.text().catch(() => "");
+    if (!r.ok) {
+      // Fall through to fallback (some accounts/projects disable /responses)
+      throw new Error(`openai_responses_failed:${r.status}:${raw.slice(0, 260)}`);
+    }
+
+    const j = raw ? JSON.parse(raw) : null;
+    const txt = extractResponsesText(j);
+    if (!txt) throw new Error("openai_empty");
+
+    const parsed = safeJsonParse(txt);
+    if (!parsed.ok) {
+      // Sometimes models wrap JSON in text. Try to salvage the first {...} block.
+      const start = txt.indexOf("{");
+      const end = txt.lastIndexOf("}");
+      if (start !== -1 && end !== -1 && end > start) {
+        const maybe = txt.slice(start, end + 1);
+        const parsed2 = safeJsonParse(maybe);
+        if (parsed2.ok) return parsed2.value;
+      }
+      throw new Error(`openai_bad_json:${txt.slice(0, 260)}`);
+    }
+
+    return parsed.value;
+  } catch (e) {
+    // Fallback: Chat Completions JSON mode
+    const r2 = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.45,
+        response_format: { type: "json_object" },
+        messages,
+      }),
+    });
+
+    const raw2 = await r2.text().catch(() => "");
+    if (!r2.ok) {
+      throw new Error(`openai_call_failed:${r2.status}:${raw2.slice(0, 260)}`);
+    }
+
+    const j2 = raw2 ? JSON.parse(raw2) : null;
+    const content = j2?.choices?.[0]?.message?.content;
+    if (!content) throw new Error("openai_empty");
+
+    const parsed = safeJsonParse(content);
+    if (!parsed.ok) throw new Error(`openai_bad_json:${String(content).slice(0, 260)}`);
+    return parsed.value;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function handler(req, res) {
   setCors(req, res);
 
   if (req.method === "OPTIONS") {
@@ -255,11 +346,19 @@ export default async function handler(req, res) {
     return send(req, res, 405, { error: "POST only" });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  // Accept a couple common env var names to prevent silent misconfig.
+  const apiKey =
+    process.env.OPENAI_API_KEY ||
+    process.env.OPENAI_KEY ||
+    process.env.OPENAI_API_TOKEN;
+
   const csvUrl = process.env.GOOGLE_SHEET_CSV_URL;
 
   if (!apiKey || !csvUrl) {
-    return send(req, res, 500, { error: "Missing environment variables" });
+    return send(req, res, 500, {
+      error: "Missing environment variables",
+      detail: !apiKey ? "OPENAI_API_KEY missing" : "GOOGLE_SHEET_CSV_URL missing",
+    });
   }
 
   const message = String(req.body?.message || "").trim();
@@ -273,8 +372,7 @@ export default async function handler(req, res) {
   if (triggeredSafety(message)) {
     return send(req, res, 200, {
       mode: "safety",
-      intro:
-        "I am really glad you reached out. You deserve immediate support, please use one of these right now.",
+      intro: "I am really glad you reached out. You deserve immediate support, please use one of these right now.",
       resources: [
         { title: "988 Suicide & Crisis Lifeline", url: "https://988lifeline.org", why: "Call or text 988, 24/7 in the U.S.", how_to_start: ["Call", "Text"] },
         { title: "Crisis Text Line", url: "https://www.crisistextline.org", why: "Text HOME to 741741 for 24/7 support.", how_to_start: ["Text"] },
@@ -287,7 +385,7 @@ export default async function handler(req, res) {
   const askingForResources = isAskingForResources(message);
 
   try {
-    // CONVERSATION MODE (no resources unless explicitly asked)
+    // Conversation mode
     if (!askingForResources) {
       const convo = await openaiJSON(apiKey, [
         {
@@ -308,11 +406,10 @@ export default async function handler(req, res) {
         { role: "user", content: message },
       ]);
 
-      // If they literally just say "hey", keep it extra light
       const responseText =
         (isSimpleGreeting(message) && !convo?.response)
           ? "Hey. What is going on today?"
-          : (convo?.response || "Hey. What is going on?");
+          : (String(convo?.response || "Hey. What is going on?").trim());
 
       return send(req, res, 200, {
         mode: "conversation",
@@ -321,10 +418,9 @@ export default async function handler(req, res) {
       });
     }
 
-    // RESOURCE MODE
+    // Resource mode
     const resources = await loadResources(csvUrl);
 
-    // Lightweight classification to keep it snappy
     const classification = await openaiJSON(apiKey, [
       {
         role: "system",
@@ -358,15 +454,14 @@ export default async function handler(req, res) {
     if (!ranked.length) {
       return send(req, res, 200, {
         mode: "no_match",
-        intro:
-          sophisticated
-            ? "I can absolutely help, but I need one detail to narrow the match. Are you looking for someone to talk to soon, a support group, therapy, or mentorship?"
-            : "I can help, but I need one detail. Are you looking for someone to talk to soon, a support group, therapy, or a mentor?",
+        intro: sophisticated
+          ? "I can absolutely help, but I need one detail to narrow the match. Are you looking for someone to talk to soon, a support group, therapy, or mentorship?"
+          : "I can help, but I need one detail. Are you looking for someone to talk to soon, a support group, therapy, or a mentor?",
         resources: [],
       });
     }
 
-    // If clarification needed, ask one question first (still no resources yet)
+    // If clarification needed, ask first (no resources yet)
     if (classification.needs_clarification && classification.clarifying_question) {
       return send(req, res, 200, {
         mode: "conversation",
@@ -378,8 +473,6 @@ export default async function handler(req, res) {
     const limit = 3;
     const top = ranked.slice(0, Math.max(limit, 5)).map((x) => x.r);
 
-    // Return PARAGRAPHS instead of cards:
-    // one intro paragraph + 1 paragraph per resource including link + how-to-start.
     const response = await openaiJSON(apiKey, [
       {
         role: "system",
@@ -423,7 +516,7 @@ export default async function handler(req, res) {
     const paras = Array.isArray(response.paragraphs) ? response.paragraphs : [];
     const clippedParas = paras.slice(0, limit);
 
-    // Provide resources array too, for backwards compatibility, but UI can ignore it.
+    // Keep resources array for compatibility (UI can ignore it)
     const outResources = top.slice(0, limit).map((r) => ({
       title: r.title,
       url: r.url,
@@ -438,10 +531,15 @@ export default async function handler(req, res) {
       resources: outResources,
     });
   } catch (err) {
-    console.error("navigate_error", err);
+    // IMPORTANT: send back a useful detail so you can see the real reason in your browser console/network tab.
+    const msg = String(err?.message || err);
     return send(req, res, 500, {
-      error: "Something went wrong",
-      detail: "Please try again in a moment.",
+      error: "Server error",
+      detail: msg.slice(0, 500),
     });
   }
 }
+
+// Export for both Next.js (export default) and Vercel Functions (module.exports)
+export default handler;
+module.exports = handler;
