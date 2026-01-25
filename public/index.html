@@ -30,7 +30,7 @@
     }
 
     body {
-      font-family: 'EB Garamond', Georgia, serif;
+      font-family: Georgia, serif;
       background: var(--bg-dark);
       color: var(--text-primary);
       letter-spacing: -0.01em;
@@ -56,6 +56,7 @@
       min-height: 100vh;
       padding: 20px;
       text-align: center;
+      padding-bottom: 280px;
     }
 
     .title {
@@ -108,8 +109,8 @@
       max-width: min(720px, 96%);
       padding: 12px 16px;
       border-radius: 14px;
-      font-size: 16px;
-      line-height: 1.75;
+      font-size: 18px;
+      line-height: 1.8;
       white-space: pre-wrap;
       word-wrap: break-word;
     }
@@ -136,6 +137,14 @@
       left: 0;
       right: 0;
       bottom: 0;
+      padding: 18px 0 22px;
+      background: transparent;
+      backdrop-filter: none;
+      border-top: none;
+      transition: all 0.3s ease;
+    }
+
+    .composer-shell.active {
       padding: 18px 0 22px;
       background: rgba(44,44,44,0.92);
       backdrop-filter: blur(10px);
@@ -165,7 +174,7 @@
       outline: none;
       background: transparent;
       color: var(--text-primary);
-      font-family: 'EB Garamond', Georgia, serif;
+      font-family: Georgia, serif;
       font-size: 16px;
       line-height: 1.5;
       resize: none;
@@ -223,7 +232,7 @@
       border: 1px solid var(--border-soft);
       background: rgba(214, 69, 69, 0.08);
       color: rgba(214, 69, 69, 0.7);
-      display: none;
+      display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
@@ -232,10 +241,6 @@
       padding: 0;
       text-decoration: none;
       position: relative;
-    }
-
-    .help-btn-inline.show {
-      display: flex;
     }
 
     .help-btn-inline:hover {
@@ -261,7 +266,7 @@
       padding: 5px 9px;
       border-radius: 5px;
       font-size: 11px;
-      font-family: 'EB Garamond', Georgia, serif;
+      font-family: Georgia, serif;
       font-weight: 400;
       white-space: nowrap;
       opacity: 0;
@@ -341,6 +346,7 @@
     const sendBtn = document.getElementById('send-btn');
     const statusEl = document.getElementById('status');
     const helpBtnInline = document.getElementById('help-btn-inline');
+    const composerShell = document.querySelector('.composer-shell');
 
     let history = [];
     let started = false;
@@ -355,7 +361,7 @@
       started = true;
       landingEl.style.display = 'none';
       chatEl.classList.add('active');
-      helpBtnInline.classList.add('show');
+      composerShell.classList.add('active');
     }
 
     function addMessage(role, content) {
