@@ -2,9 +2,10 @@
 //
 // Goals:
 // - Always respond (better error surfacing)
-// - Less talkative, more astute, longer resource-grounded answers
-// - Fewer clarifying questions (only when truly necessary)
-// - Returns paragraphs (no cards), but keeps `resources` for backwards compatibility
+// - Smarter, more detailed, more resource-grounded
+// - Far fewer clarifying questions
+// - No generic filler intros
+// - Returns paragraphs, keeps `resources` for backwards compatibility
 //
 // Env vars required:
 // - OPENAI_API_KEY
@@ -63,22 +64,29 @@ function triggeredSafety(message) {
   return SAFETY_REGEX.some((rx) => rx.test(message));
 }
 
-function isAskingForResources(message) {
-  const lower = String(message || "").toLowerCase().trim();
-  if (!lower) return false;
-
-  if (isSimpleGreeting(lower)) return false;
-  if (lower.length >= 18) return true;
-
-  return RESOURCE_REQUEST_KEYWORDS.some((kw) => lower.includes(kw));
-}
-
 function normalize(text) {
   return String(text || "")
     .toLowerCase()
     .replace(/[^\w\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function isSimpleGreeting(lower) {
+  const t = normalize(lower);
+  return t === "hey" || t === "hi" || t === "hello" || t === "yo" || t === "sup";
+}
+
+function isAskingForResources(message) {
+  const lower = String(message || "").toLowerCase().trim();
+  if (!lower) return false;
+  if (isSimpleGreeting(lower)) return false;
+
+  // Treat most real messages as resource intent.
+  // If they are typing more than a greeting, the product goal is to find resources.
+  if (lower.length >= 12) return true;
+
+  return RESOURCE_REQUEST_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
 function tokenize(text) {
@@ -94,6 +102,7 @@ function tokenize(text) {
     .filter((w) => w.length > 2 && !stop.has(w));
 }
 
+// Minimal CSV parser (handles quotes)
 function parseCSV(csv) {
   const rows = [];
   let row = [];
@@ -242,7 +251,7 @@ async function openaiJSON(apiKey, messages, { timeoutMs = 20000 } = {}) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        temperature: 0.45,
+        temperature: 0.35,
         response_format: { type: "json_object" },
         messages,
       }),
@@ -256,7 +265,13 @@ async function openaiJSON(apiKey, messages, { timeoutMs = 20000 } = {}) {
     const j = JSON.parse(raw);
     const content = j?.choices?.[0]?.message?.content;
     if (!content) throw new Error("openai_empty");
-    return JSON.parse(content);
+
+    // The model can still output weird JSON. Protect parsing.
+    try {
+      return JSON.parse(content);
+    } catch {
+      throw new Error(`openai_bad_json:${content.slice(0, 200)}`);
+    }
   } finally {
     clearTimeout(t);
   }
@@ -287,9 +302,36 @@ function wantsSophisticatedStyle(message) {
   );
 }
 
-function isSimpleGreeting(lower) {
-  const t = normalize(lower);
-  return t === "hey" || t === "hi" || t === "hello" || t === "yo" || t === "sup";
+function safeString(x) {
+  if (typeof x === "string") return x;
+  if (x == null) return "";
+  try {
+    return JSON.stringify(x);
+  } catch {
+    return String(x);
+  }
+}
+
+function buildResourceParagraph(resource) {
+  const steps = buildHowToStart(resource).slice(0, 4).join(", ");
+  const bestFor = resource.best_for ? `Best for: ${resource.best_for}` : "";
+  const when = resource.when_to_use ? `When to use: ${resource.when_to_use}` : "";
+  const notFor = resource.not_for ? `Not for: ${resource.not_for}` : "";
+  const father = resource.fatherlessness_connection
+    ? `Connection to fatherlessness: ${resource.fatherlessness_connection}`
+    : "";
+
+  // Keep this rich but strictly grounded in sheet fields.
+  const detailBits = [resource.description, bestFor, when, father, notFor].filter(Boolean);
+
+  const detailText = detailBits.join(" ").replace(/\s+/g, " ").trim();
+
+  return (
+    `${resource.title}\n` +
+    `${resource.url}\n` +
+    `${detailText}\n` +
+    `How to start: ${steps}`
+  ).trim();
 }
 
 export default async function handler(req, res) {
@@ -310,7 +352,7 @@ export default async function handler(req, res) {
   if (!apiKey || !csvUrl) {
     return send(res, 500, {
       error: "Missing environment variables",
-      detail: "Set OPENAI_API_KEY and GOOGLE_SHEET_CSV_URL in Vercel env vars (and redeploy).",
+      detail: "Set OPENAI_API_KEY and GOOGLE_SHEET_CSV_URL in Vercel env vars, then redeploy.",
     });
   }
 
@@ -325,8 +367,7 @@ export default async function handler(req, res) {
   if (triggeredSafety(message)) {
     return send(res, 200, {
       mode: "safety",
-      intro:
-        "You deserve immediate support. Reach out to one of these resources right now—they are trained to help.",
+      intro: "You deserve immediate support. Use one of these resources right now.",
       paragraphs: [
         "988 Suicide & Crisis Lifeline\nhttps://988lifeline.org\nHow to start: Call, Text",
         "Crisis Text Line\nhttps://www.crisistextline.org\nHow to start: Text",
@@ -345,30 +386,27 @@ export default async function handler(req, res) {
   const askingForResources = isAskingForResources(message);
 
   try {
-    // Conversation mode only for true greetings or very short messages
+    // Light conversation mode only for greetings.
     if (!askingForResources) {
       const convo = await openaiJSON(apiKey, [
         {
           role: "system",
           content:
-            "You are SinePatre. Be calm, direct, measured, and not overly friendly.\n" +
-            "You are not a therapist. Do not give medical advice. Do not mention external resources unless asked.\n\n" +
-            "Output JSON only: { \"response\": string }\n\n" +
+            "You are SinePatre.\n" +
+            "Tone: calm, measured, mature, not overly friendly.\n" +
+            "Do not give medical advice. Do not lecture. Do not discuss grammar or school topics unless asked.\n" +
+            "Output JSON only: { \"response\": string }\n" +
             "Rules:\n" +
-            "- If it is a greeting, reply with one short greeting and one direct prompt.\n" +
-            "- Otherwise: 1 to 2 paragraphs, 4 to 6 sentences total, substantive and probing.\n" +
-            "- Rarely ask questions. Instead, make observations that show you understand.\n" +
-            "- Sound more mature, sophisticated, and less patronizing if user requests it.\n" +
-            "- Be astute and perceptive in your responses.\n",
+            "- 2 to 4 sentences.\n" +
+            "- Ask at most one question.\n",
         },
         ...history,
         { role: "user", content: message },
       ]);
 
-      const fallback = isSimpleGreeting(message) ? "What's on your mind right now?" : "I hear you. Tell me more about what you're dealing with.";
       return send(res, 200, {
         mode: "conversation",
-        intro: String(convo?.response || fallback).trim(),
+        intro: String(convo?.response || "Hey. What are you looking for support with?").trim(),
         paragraphs: [],
         resources: [],
       });
@@ -377,19 +415,19 @@ export default async function handler(req, res) {
     // Resource mode
     const resources = await loadResources(csvUrl);
 
-    // Classification: fewer clarifying questions (default to best-guess)
+    // Quick classification, but do not over-clarify.
     const classification = await openaiJSON(apiKey, [
       {
         role: "system",
         content:
-          "Classify what support the user is seeking.\n" +
+          "Classify what support the user is looking for.\n" +
           "Output JSON only:\n" +
-          '{ "need_tags": string[], "urgency": "low|medium|high", "needs_clarification": boolean, "clarifying_question": string|null }\n\n' +
+          '{ "need_tags": string[], "urgency": "low|medium|high", "needs_clarification": boolean, "clarifying_question": string|null }\n' +
           "Rules:\n" +
-          "- Use short tags: therapy, support-group, mentor, grief, school-stress, anxiety, depression, family, identity, talk-now.\n" +
-          "- Set needs_clarification=true ONLY if you genuinely cannot choose a direction.\n" +
-          "- If needs_clarification=true, ask ONE short question.\n" +
-          "- Otherwise, do not ask questions. Do not give advice.\n",
+          "- Tags: therapy, support-group, mentor, grief, school-stress, anxiety, depression, family, identity, talk-now.\n" +
+          "- Set needs_clarification=true ONLY if it is impossible to choose.\n" +
+          "- If needs_clarification=true, the question must be one short sentence.\n" +
+          "- Do not give advice.\n",
       },
       ...history,
       { role: "user", content: message },
@@ -410,20 +448,29 @@ export default async function handler(req, res) {
       if (!ranked.length) ranked = rankedAll;
     }
 
+    // If nothing scores, still return top items by weak match instead of asking lots of questions.
     if (!ranked.length) {
+      const fallback = resources.slice(0, 3);
+      const paragraphs = fallback.map(buildResourceParagraph);
+
       return send(res, 200, {
-        mode: "no_match",
+        mode: "recommendations_paragraphs",
         intro:
           sophisticated
-            ? "I can help, but I need more specificity. What form of support would be most useful—therapy, a support group, mentorship, or someone to talk to?"
-            : "I can help, but I need to understand better. Are you looking for therapy, a support group, mentorship, or someone to talk to?",
-        paragraphs: [],
-        resources: [],
+            ? "I am not seeing a tight match from the database yet, so I am sharing a few broadly relevant options. If you tell me whether you want therapy, a group, or mentorship, I can sharpen the match."
+            : "I am not seeing a tight match yet, so here are a few broadly relevant options. If you say whether you want therapy, a group, or mentorship, I can narrow it down.",
+        paragraphs,
+        resources: fallback.map((r) => ({ title: r.title, url: r.url, why: "", how_to_start: buildHowToStart(r) })),
       });
     }
 
-    // If truly ambiguous, ask ONE question and stop (no resources yet)
-    if (classification.needs_clarification && classification.clarifying_question) {
+    // Only ask a clarifying question if ambiguity is real AND scores are close/weak.
+    const topScore = ranked[0]?.s || 0;
+    const secondScore = ranked[1]?.s || 0;
+    const weak = topScore < 8;
+    const close = Math.abs(topScore - secondScore) <= 2;
+
+    if (classification.needs_clarification && weak && close && classification.clarifying_question) {
       return send(res, 200, {
         mode: "conversation",
         intro: String(classification.clarifying_question).trim(),
@@ -433,63 +480,41 @@ export default async function handler(req, res) {
     }
 
     const limit = 3;
-    const top = ranked.slice(0, Math.max(limit, 6)).map((x) => x.r);
+    const top = ranked.slice(0, limit).map((x) => x.r);
 
-    const response = await openaiJSON(apiKey, [
+    // Build paragraphs deterministically from the sheet so you never get [object Object]
+    // and you never get generic filler.
+    const paragraphs = top.map(buildResourceParagraph);
+
+    // Generate a concise, mature intro that references the request, but never lectures.
+    const introGen = await openaiJSON(apiKey, [
       {
         role: "system",
         content:
-          "You are SinePatre. The user wants resources.\n\n" +
-          "You MUST use ONLY the provided resources and their fields. Do not invent details.\n" +
-          "Write in paragraphs (no cards, no bullet lists).\n\n" +
-          "Output JSON only: { \"intro\": string, \"paragraphs\": string[] }\n\n" +
+          "Write a concise intro for resource recommendations.\n" +
+          "Tone: mature, perceptive, not overly friendly.\n" +
+          "No generic educational preambles. No lists.\n" +
+          "Output JSON only: { \"intro\": string }\n" +
           "Rules:\n" +
-          "- intro: 2 to 3 sentences, direct, measured, substantive.\n" +
-          "- paragraphs: 1 to 3 paragraphs total, one per resource.\n" +
-          "- Each resource paragraph must include:\n" +
-          "  (a) the resource name on the first line,\n" +
-          "  (b) the URL on the second line,\n" +
-          "  (c) a thorough explanation (5 to 8 sentences) grounded in description/best_for/when_to_use/fatherlessness_connection/not_for,\n" +
-          "  (d) a final line exactly: 'How to start: X, Y, Z' using only Call, Text, Form, Walk-in, Referral (2 to 4 items).\n" +
-          "- Ask zero questions in this mode.\n" +
-          "- Write with sophistication, maturity, and astuteness.\n",
+          "- 2 to 3 sentences.\n" +
+          "- Do not ask a question.\n",
       },
       ...history,
       {
         role: "user",
-        content: JSON.stringify({
+        content: safeString({
           message,
           sophistication: sophisticated ? "high" : "normal",
-          urgency,
           need_tags: classification.need_tags || [],
-          resources: top.map((r) => ({
-            title: r.title,
-            url: r.url,
-            description: r.description,
-            best_for: r.best_for,
-            when_to_use: r.when_to_use,
-            not_for: r.not_for,
-            fatherlessness_connection: r.fatherlessness_connection,
-          })),
         }),
       },
     ]);
 
-    const paras = Array.isArray(response.paragraphs) ? response.paragraphs : [];
-    const clippedParas = paras.slice(0, limit);
-
-    const outResources = top.slice(0, limit).map((r) => ({
-      title: r.title,
-      url: r.url,
-      why: "",
-      how_to_start: buildHowToStart(r),
-    }));
-
     return send(res, 200, {
       mode: "recommendations_paragraphs",
-      intro: String(response.intro || "Here are resources tailored to what you need.").trim(),
-      paragraphs: clippedParas,
-      resources: outResources,
+      intro: String(introGen?.intro || "Here are a few resources from the database that fit what you described.").trim(),
+      paragraphs,
+      resources: top.map((r) => ({ title: r.title, url: r.url, why: "", how_to_start: buildHowToStart(r) })),
     });
   } catch (err) {
     const msg = String(err?.message || err);
@@ -499,9 +524,9 @@ export default async function handler(req, res) {
       detail: msg.slice(0, 600),
       hint:
         msg.includes("openai_call_failed")
-          ? "OpenAI call failed. Check your OPENAI_API_KEY, billing, model access, and Vercel function logs."
+          ? "OpenAI call failed. Check OPENAI_API_KEY, billing, model access, and Vercel logs."
           : msg.includes("sheet_fetch_failed")
-          ? "Sheet fetch failed. Check GOOGLE_SHEET_CSV_URL is a published CSV link (not the edit link)."
+          ? "Sheet fetch failed. GOOGLE_SHEET_CSV_URL must be a published CSV export link, not the edit link."
           : msg.includes("missing_column")
           ? "Your sheet headers do not match the required columns."
           : "Check Vercel function logs for details.",
