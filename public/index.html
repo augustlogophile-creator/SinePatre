@@ -4,21 +4,38 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Youth Fatherless Network — Resource Navigator</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&display=swap');
 
-    :root {
-      --bg-dark: #2c2c2c;
-      --text-primary: #ffffff;
-      --text-secondary: #b0b0b0;
-      --accent-blue: #3d5a9f;
-      --accent-blue-hover: #2f4878;
-      --accent-red: #d64545;
-      --accent-red-hover: #c23636;
-      --border-soft: rgba(255,255,255,0.08);
-      --message-user: #0f0f10;
-      --message-user-border: rgba(255,255,255,0.10);
-      --message-assistant: transparent;
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&display=swap');
+
+    :root{
+      /* YFN Light + Navy */
+      --bg: #f5f6f7;
+      --surface: #ffffff;
+      --surface-2: #fbfbfc;
+
+      --text: #101214;
+      --muted: rgba(16,18,20,0.68);
+
+      --navy: #0b2a4a;
+      --navy-2: #0f3b67;
+
+      --border: rgba(16,18,20,0.10);
+      --border-soft: rgba(16,18,20,0.06);
+
+      --shadow: 0 18px 40px rgba(16,18,20,0.08);
+      --shadow-soft: 0 10px 24px rgba(16,18,20,0.06);
+
+      --radius-xl: 22px;
+      --radius-lg: 18px;
+      --radius-md: 14px;
+
+      --danger: #b3262e;
+      --danger-bg: rgba(179,38,46,0.10);
+      --danger-br: rgba(179,38,46,0.20);
+
+      --link: #0f3f91;
+      --link-hover: #0b326f;
     }
 
     * { box-sizing: border-box; }
@@ -29,274 +46,319 @@
       padding: 0;
     }
 
-    body {
-      font-family: Georgia, serif;
-      background: var(--bg-dark);
-      color: var(--text-primary);
+    body{
+      font-family: "Lexend", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
       letter-spacing: -0.01em;
-      line-height: 1.6;
+      line-height: 1.65;
     }
 
     .app { min-height: 100vh; }
 
-    .center {
-      width: min(860px, 100%);
+    .center{
+      width: min(1040px, 100%);
       margin: 0 auto;
       padding: 0 20px;
     }
 
-    .landing {
+    /* ===== Landing (matches clean card style) ===== */
+    .landing{
       display: flex;
       flex-direction: column;
       justify-content: center;
+      min-height: 88vh;
+      padding: 34px 0 260px;
+    }
+
+    .hero-card{
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-soft);
+      padding: 34px 34px;
+    }
+
+    .eyebrow{
+      display: inline-flex;
+      gap: 10px;
       align-items: center;
-      min-height: 100vh;
-      padding: 20px;
-      text-align: center;
-      padding-bottom: 280px;
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(16,18,20,0.55);
+      margin: 0 0 14px;
     }
 
-    .title {
-      font-size: clamp(44px, 6.2vw, 66px);
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      margin: 0 0 20px 0;
+    .eyebrow .dot{
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--navy);
+      opacity: 0.9;
     }
 
-    .desc {
-      margin: 0 auto 40px;
-      max-width: 640px;
-      color: var(--text-secondary);
+    .title{
+      font-size: clamp(40px, 5.2vw, 58px);
+      line-height: 1.06;
+      letter-spacing: -0.03em;
+      margin: 0 0 14px 0;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .desc{
+      margin: 0;
+      max-width: 860px;
+      color: var(--muted);
       font-size: 16px;
-      line-height: 1.85;
+      line-height: 1.9;
     }
 
-    .chat {
+    /* ===== Chat ===== */
+    .chat{
       display: none;
-      padding-top: 12px;
+      padding-top: 22px;
       padding-bottom: 140px;
     }
+    .chat.active{ display: block; }
 
-    .chat.active { display: block; }
-
-    .messages {
+    .messages{
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 14px;
       margin-top: 0;
     }
 
-    .msg-row {
+    .msg-row{
       display: flex;
-      animation: slideIn 0.2s ease-out;
+      animation: slideIn 0.18s ease-out;
+    }
+    .msg-row.user{ justify-content: flex-end; }
+    .msg-row.assistant{ justify-content: flex-start; }
+
+    @keyframes slideIn{
+      from{ opacity: 0; transform: translateY(6px); }
+      to{ opacity: 1; transform: translateY(0); }
     }
 
-    .msg-row.user { justify-content: flex-end; }
-    .msg-row.assistant { justify-content: flex-start; }
-
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .bubble {
-      max-width: min(720px, 96%);
-      padding: 12px 16px;
-      border-radius: 14px;
-      font-size: 18px;
-      line-height: 1.8;
+    .bubble{
+      max-width: min(820px, 96%);
+      padding: 12px 14px;
+      border-radius: 16px;
+      font-size: 15px;
+      line-height: 1.75;
       white-space: pre-wrap;
       word-wrap: break-word;
+      box-shadow: none;
     }
 
-    .bubble.user {
-      background: rgba(0,0,0,0.30);
-      border: 1px solid var(--message-user-border);
-      color: rgba(255,255,255,0.92);
+    /* User bubble: navy, clean */
+    .bubble.user{
+      background: var(--navy);
+      color: rgba(255,255,255,0.96);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-top-right-radius: 10px;
     }
 
-    .bubble.assistant {
-      background: var(--message-assistant);
-      color: rgba(255,255,255,0.92);
-      padding-left: 0;
-      padding-right: 0;
-      border-radius: 0;
+    /* Assistant bubble: on white surface (like Discussion page feel) */
+    .bubble.assistant{
+      background: var(--surface);
+      color: rgba(16,18,20,0.92);
+      border: 1px solid var(--border-soft);
+      border-top-left-radius: 10px;
+      box-shadow: var(--shadow-soft);
     }
 
-    .bubble.assistant strong { color: rgba(255,255,255,0.95); }
+    .bubble.assistant strong{ color: rgba(16,18,20,0.98); }
 
-    .composer-shell {
+    /* ===== Composer (fixed bottom) ===== */
+    .composer-shell{
       position: fixed;
       left: 0;
       right: 0;
       bottom: 0;
-      padding: 18px 0 22px;
-      background: transparent;
-      backdrop-filter: none;
-      border-top: none;
-      transition: all 0.3s ease;
-    }
-
-    .composer-shell.active {
-      padding: 18px 0 22px;
-      background: rgba(44,44,44,0.92);
+      padding: 14px 0 18px;
+      background: rgba(245,246,247,0.86);
       backdrop-filter: blur(10px);
-      border-top: 1px solid rgba(255,255,255,0.06);
+      border-top: 1px solid rgba(16,18,20,0.08);
+      transition: all 0.25s ease;
     }
 
-    .input-bar {
+    .composer-shell.active{
+      background: rgba(245,246,247,0.92);
+    }
+
+    .input-bar{
       display: grid;
       grid-template-columns: 1fr auto auto;
       gap: 10px;
       align-items: flex-end;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid var(--border-soft);
+      background: var(--surface);
+      border: 1px solid var(--border);
       border-radius: 18px;
-      padding: 12px 14px;
-      transition: all 0.2s ease;
+      padding: 12px 12px;
+      box-shadow: var(--shadow-soft);
+      transition: border-color 0.18s ease, box-shadow 0.18s ease;
     }
 
-    .input-bar:focus-within {
-      border-color: rgba(61, 90, 159, 0.4);
-      background: rgba(255,255,255,0.08);
+    .input-bar:focus-within{
+      border-color: rgba(11,42,74,0.35);
+      box-shadow: 0 0 0 4px rgba(11,42,74,0.08), var(--shadow-soft);
     }
 
-    textarea {
+    textarea{
       width: 100%;
       border: none;
       outline: none;
       background: transparent;
-      color: var(--text-primary);
-      font-family: Georgia, serif;
-      font-size: 16px;
-      line-height: 1.5;
+      color: var(--text);
+      font-family: "Lexend", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.55;
       resize: none;
       min-height: 22px;
-      max-height: 110px;
-      padding: 4px 0;
+      max-height: 120px;
+      padding: 4px 2px;
       font-weight: 400;
     }
 
-    textarea::placeholder {
-      color: var(--text-secondary);
+    textarea::placeholder{
+      color: rgba(16,18,20,0.45);
       font-weight: 400;
     }
 
-    .btn {
-      width: 38px;
-      height: 38px;
-      border-radius: 10px;
-      border: 1px solid var(--border-soft);
-      background: var(--accent-blue);
-      color: white;
+    .btn{
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      border: 1px solid rgba(11,42,74,0.22);
+      background: var(--navy);
+      color: #fff;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: transform 0.12s ease, background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
       flex-shrink: 0;
       padding: 0;
     }
 
-    .btn:hover:not(:disabled) {
-      background: var(--accent-blue-hover);
-      border-color: rgba(61, 90, 159, 0.5);
+    .btn:hover:not(:disabled){
+      background: var(--navy-2);
+      border-color: rgba(11,42,74,0.32);
+      transform: translateY(-1px);
     }
 
-    .btn:disabled {
-      opacity: 0.5;
+    .btn:disabled{
+      opacity: 0.55;
       cursor: not-allowed;
     }
 
-    .btn svg {
+    .btn svg{
       width: 16px;
       height: 16px;
       stroke: currentColor;
-      stroke-width: 2.2;
+      stroke-width: 2.4;
       fill: none;
       stroke-linecap: round;
       stroke-linejoin: round;
     }
 
-    .help-btn-inline {
-      width: 38px;
-      height: 38px;
-      border-radius: 10px;
-      border: 1px solid var(--border-soft);
-      background: rgba(214, 69, 69, 0.08);
-      color: rgba(214, 69, 69, 0.7);
+    /* Help button: subtle red outline, clean */
+    .help-btn-inline{
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      border: 1px solid var(--danger-br);
+      background: var(--danger-bg);
+      color: var(--danger);
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
       flex-shrink: 0;
       padding: 0;
       text-decoration: none;
       position: relative;
     }
 
-    .help-btn-inline:hover {
-      background: rgba(214, 69, 69, 0.15);
-      color: var(--accent-red);
-      border-color: rgba(214, 69, 69, 0.3);
+    .help-btn-inline:hover{
+      background: rgba(179,38,46,0.14);
+      border-color: rgba(179,38,46,0.28);
+      transform: translateY(-1px);
     }
 
-    .help-btn-inline svg {
+    .help-btn-inline svg{
       width: 16px;
       height: 16px;
       fill: currentColor;
     }
 
-    .help-btn-inline::after {
+    .help-btn-inline::after{
       content: 'Get help immediately';
       position: absolute;
-      bottom: -28px;
+      bottom: -30px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.85);
-      color: white;
-      padding: 5px 9px;
-      border-radius: 5px;
+      background: rgba(16,18,20,0.92);
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 8px;
       font-size: 11px;
-      font-family: Georgia, serif;
-      font-weight: 400;
+      font-weight: 500;
       white-space: nowrap;
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.2s ease;
+      transition: opacity 0.16s ease;
       z-index: 10;
     }
 
-    .help-btn-inline:hover::after { opacity: 1; }
+    .help-btn-inline:hover::after{ opacity: 1; }
 
-    .status {
+    .status{
       margin-top: 10px;
-      color: rgba(255,255,255,0.65);
-      font-size: 14px;
+      color: rgba(16,18,20,0.55);
+      font-size: 13px;
       min-height: 18px;
+      font-weight: 400;
     }
 
-    @media (max-width: 640px) {
-      .center { padding: 0 16px; }
-      .bubble.assistant { max-width: 100%; }
+    a{ color: var(--link); }
+    a:hover{ color: var(--link-hover); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar{ width: 8px; }
+    ::-webkit-scrollbar-track{ background: transparent; }
+    ::-webkit-scrollbar-thumb{ background: rgba(16,18,20,0.12); border-radius: 8px; }
+    ::-webkit-scrollbar-thumb:hover{ background: rgba(16,18,20,0.18); }
+
+    @media (max-width: 740px){
+      .center{ padding: 0 16px; }
+      .hero-card{ padding: 26px 20px; border-radius: 18px; }
+      .bubble{ font-size: 14.5px; }
     }
 
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+    @media (max-width: 420px){
+      .btn, .help-btn-inline{ width: 38px; height: 38px; border-radius: 11px; }
+      .input-bar{ padding: 11px 11px; }
+    }
   </style>
 </head>
+
 <body>
   <div class="app">
     <div class="center">
       <section id="landing" class="landing">
-        <h1 class="title">Youth Fatherless Network</h1>
-        <p class="desc">
-          A private guide designed for fatherless teens seeking support. Share what's on your mind, and I will respond.
-          When you're ready, I can point you toward real resources from a curated database, with practical next steps.
-        </p>
+        <div class="hero-card">
+          <div class="eyebrow"><span class="dot"></span><span>Resource Navigator</span></div>
+          <h1 class="title">Youth Fatherless Network</h1>
+          <p class="desc">
+            A private guide designed for fatherless teens seeking support. Share what’s on your mind, and I will respond.
+            When you’re ready, I can point you toward real resources from a curated database, with practical next steps.
+          </p>
+        </div>
       </section>
 
       <section id="chat" class="chat" aria-label="Chat">
@@ -314,13 +376,27 @@
             autocomplete="off"
             spellcheck="true"
           ></textarea>
-          <a id="help-btn-inline" href="https://www.crisistextline.org/" target="_blank" rel="noopener noreferrer" class="help-btn-inline">
-            <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" fill="currentColor"/></svg>
+
+          <a
+            id="help-btn-inline"
+            href="https://www.crisistextline.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="help-btn-inline"
+            aria-label="Get help immediately"
+          >
+            <svg viewBox="0 0 24 24">
+              <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" fill="currentColor"/>
+            </svg>
           </a>
-          <button id="send-btn" class="btn" title="Send message">
-            <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+
+          <button id="send-btn" class="btn" title="Send message" aria-label="Send message">
+            <svg viewBox="0 0 24 24">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
           </button>
         </div>
+
         <div id="status" class="status"></div>
       </div>
     </div>
@@ -340,7 +416,7 @@
 
     function autoGrowTextarea() {
       inputEl.style.height = 'auto';
-      inputEl.style.height = Math.min(inputEl.scrollHeight, 110) + 'px';
+      inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
     }
 
     function startChatLayoutIfNeeded() {
