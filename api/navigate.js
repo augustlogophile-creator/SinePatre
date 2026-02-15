@@ -1,15 +1,18 @@
-// api/navigate.js - SinePatre Resource Navigator (Vercel serverless)
+// api/navigate.js - YFN Resource Navigator (Vercel serverless)
 //
-// Goals:
-// - Always respond (better error surfacing)
-// - Slightly conversational by default
-// - ONLY give programs when user explicitly asks for resources/recommendations
-// - Smarter, more detailed, more resource-grounded when in resource mode
-// - Use conversation context so resource picks match what was discussed
-// - No generic filler intros
-// - Rephrase sheet content (do NOT repeat verbatim)
-// - Remove "How to start" everywhere
-// - Returns paragraphs, keeps `resources` for backwards compatibility
+// Goals (updated):
+// - Synthesize the user’s prompt and infer what they are truly asking for.
+// - Stay tightly scoped. No unrelated content, no random resources.
+// - In resource mode: search the sheet, pick ONLY the best 1–3 matches, and present succinctly.
+// - Every recommended item must be clearly tied to the user’s ask.
+// - For “how do I do X” style requests: provide resources/places to learn (links), do not teach the steps.
+// - Format each recommended item as:
+//
+//   **Title**
+//   URL
+//   **Description:** ...
+//   **Why it matches what you're looking for:** ...
+//   **Next steps:** ...
 //
 // Env vars required:
 // - OPENAI_API_KEY
@@ -18,7 +21,6 @@
 const MAX_MESSAGE_LENGTH = 1500;
 const MAX_HISTORY_ITEMS = 30;
 
-// More expensive / better model
 const OPENAI_MODEL = "gpt-4o";
 
 const SAFETY_REGEX = [
@@ -29,7 +31,7 @@ const SAFETY_REGEX = [
   /\b(overdose|poison|hang)\b/i,
 ];
 
-// Only treat as resource intent when user explicitly asks
+// More careful: only treat as explicit “use the database” intent when user asks for help finding support/resources.
 const RESOURCE_REQUEST_KEYWORDS = [
   "resources",
   "resource",
@@ -89,28 +91,6 @@ function normalize(text) {
     .replace(/[^\w\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function isSimpleGreeting(message) {
-  const t = normalize(message);
-  return t === "hey" || t === "hi" || t === "hello" || t === "yo" || t === "sup" || t === "hey there";
-}
-
-function looksLikeSmallTalk(message) {
-  const t = normalize(message);
-  if (isSimpleGreeting(t)) return true;
-  if (
-    t.includes("how are you") ||
-    t.includes("hows it going") ||
-    t.includes("what's up") ||
-    t.includes("whats up") ||
-    t.includes("good morning") ||
-    t.includes("good afternoon") ||
-    t.includes("good evening")
-  ) {
-    return true;
-  }
-  return false;
 }
 
 function userExplicitlyAskedForResources(message) {
@@ -236,24 +216,23 @@ function isCrisisResource(resource) {
   );
 }
 
-function scoreResource(resource, queryTokens, contextTokens, tagTokens, urgency) {
+function scoreResource(resource, queryTokens, contextTokens) {
   const haystack = tokenize(
     `${resource.title} ${resource.description} ${resource.best_for} ${resource.fatherlessness_connection} ${resource.when_to_use} ${resource.not_for}`
   );
 
   let score = 0;
 
-  // Highest weight: explicit ask text (what they asked for right now)
+  // Current ask is highest.
   for (const w of haystack) {
-    if (queryTokens.includes(w)) score += 4;
-    if (tagTokens.includes(w)) score += 6;
-    if (contextTokens.includes(w)) score += 2; // softer weight for prior context
+    if (queryTokens.includes(w)) score += 5;
+    if (contextTokens.includes(w)) score += 2;
   }
 
+  // Gentle boost if explicitly tied to fatherlessness in sheet.
   const fatherText = (resource.fatherlessness_connection || "").toLowerCase();
-  if (fatherText.includes("father") || fatherText.includes("dad") || fatherText.includes("fatherless")) score += 5;
+  if (fatherText.includes("father") || fatherText.includes("dad") || fatherText.includes("fatherless")) score += 3;
 
-  if (urgency === "high" && isCrisisResource(resource)) score += 10;
   return score;
 }
 
@@ -265,12 +244,12 @@ function sanitizeHistory(history) {
     .slice(-MAX_HISTORY_ITEMS);
 }
 
-function recentContextText(history, maxTurns = 8) {
+function recentContextText(history, maxTurns = 10) {
   const slice = Array.isArray(history) ? history.slice(-maxTurns) : [];
   return slice
     .map((m) => `${m.role}: ${m.content}`)
     .join("\n")
-    .slice(0, 4000);
+    .slice(0, 4500);
 }
 
 async function openaiJSON(apiKey, messages, { timeoutMs = 25000 } = {}) {
@@ -287,7 +266,7 @@ async function openaiJSON(apiKey, messages, { timeoutMs = 25000 } = {}) {
       },
       body: JSON.stringify({
         model: OPENAI_MODEL,
-        temperature: 0.35,
+        temperature: 0.25,
         response_format: { type: "json_object" },
         messages,
       }),
@@ -310,18 +289,6 @@ async function openaiJSON(apiKey, messages, { timeoutMs = 25000 } = {}) {
   }
 }
 
-function wantsSophisticatedStyle(message) {
-  const t = normalize(message);
-  return (
-    t.includes("more sophisticated") ||
-    t.includes("be more sophisticated") ||
-    t.includes("sound more sophisticated") ||
-    t.includes("formal") ||
-    t.includes("more mature") ||
-    t.includes("more articulate")
-  );
-}
-
 function safeString(x) {
   if (typeof x === "string") return x;
   if (x == null) return "";
@@ -332,15 +299,14 @@ function safeString(x) {
   }
 }
 
-function fallbackParagraphFromFields(r) {
-  const bits = [];
-  if (r.description) bits.push(r.description);
-  if (r.best_for) bits.push(`Best for: ${r.best_for}.`);
-  if (r.when_to_use) bits.push(`Use when: ${r.when_to_use}.`);
-  if (r.not_for) bits.push(`Not for: ${r.not_for}.`);
-  if (r.fatherlessness_connection) bits.push(`Connection to fatherlessness: ${r.fatherlessness_connection}.`);
-
-  return `${r.title}: ${r.url}\n${bits.join(" ").replace(/\s+/g, " ").trim()}`.trim();
+function buildCardText({ title, url, description, why, nextSteps }) {
+  const lines = [];
+  lines.push(`**${title}**`);
+  lines.push(url);
+  lines.push(`**Description:** ${String(description || "").trim()}`);
+  lines.push(`**Why it matches what you're looking for:** ${String(why || "").trim()}`);
+  lines.push(`**Next steps:** ${String(nextSteps || "").trim()}`);
+  return lines.join("\n");
 }
 
 export default async function handler(req, res) {
@@ -370,7 +336,7 @@ export default async function handler(req, res) {
   if (message.length > MAX_MESSAGE_LENGTH) return send(req, res, 400, { error: "Message too long" });
 
   const history = sanitizeHistory(req.body?.history);
-  const sophisticated = wantsSophisticatedStyle(message);
+  const contextText = recentContextText(history, 10);
 
   // Safety gate
   if (triggeredSafety(message)) {
@@ -378,165 +344,180 @@ export default async function handler(req, res) {
       mode: "safety",
       intro: "You deserve immediate support. Please contact one of these right now.",
       paragraphs: [
-        "988 Suicide & Crisis Lifeline: https://988lifeline.org\nFree, 24/7 support in the U.S. by phone or text.",
-        "Crisis Text Line: https://www.crisistextline.org\n24/7 crisis support by text.",
-        "Teen Line: https://teenline.org\nPeer support for teens, with supervised listeners.",
-        "Childhelp Hotline: https://www.childhelp.org/hotline/\nSupport if you are dealing with abuse or feeling unsafe.",
+        buildCardText({
+          title: "Teen Line",
+          url: "https://didihirsch.org/teenline/",
+          description: "Peer support for teens, with trained listeners and supervision.",
+          why: "This is for moments when you need to talk to someone soon and you want a teen-focused option.",
+          nextSteps: "Open the link and use the call, text, or email options based on what feels easiest right now.",
+        }),
+        buildCardText({
+          title: "988 Suicide & Crisis Lifeline",
+          url: "https://988lifeline.org",
+          description: "Free 24/7 crisis support in the U.S. by phone or text.",
+          why: "Use this if you feel unsafe, overwhelmed, or at risk right now.",
+          nextSteps: "Call or text 988. If you are in immediate danger, call local emergency services.",
+        }),
       ],
       resources: [
+        { title: "Teen Line", url: "https://didihirsch.org/teenline/", why: "" },
         { title: "988 Suicide & Crisis Lifeline", url: "https://988lifeline.org", why: "" },
-        { title: "Crisis Text Line", url: "https://www.crisistextline.org", why: "" },
-        { title: "Teen Line", url: "https://teenline.org", why: "" },
-        { title: "Childhelp Hotline", url: "https://www.childhelp.org/hotline/", why: "" },
       ],
     });
   }
 
+  // Step 1: intent synthesis and scope decision (keeps the bot from being random)
+  const intent = await openaiJSON(apiKey, [
+    {
+      role: "system",
+      content:
+        "You are a careful intent analyzer for Youth Fatherless Network's Resource Navigator.\n" +
+        "Your job is to: (1) restate what the user is asking for, (2) infer what they likely mean, (3) decide which mode to use.\n\n" +
+        "Return JSON only:\n" +
+        '{ "user_goal": string, "needs_resources": boolean, "scope": "yfn_support"|"general_howto"|"unclear", "clarifying_question": string }\n\n' +
+        "Rules:\n" +
+        "- user_goal: 10 to 18 words, concrete.\n" +
+        "- needs_resources: true if user is asking for resources, programs, options, where to go, who to talk to, or how to find something.\n" +
+        "- scope:\n" +
+        "  yfn_support = fatherlessness-related support, mental health, teen support, community, guidance, programs.\n" +
+        "  general_howto = unrelated skill task like tying a tie, homework, cooking, etc.\n" +
+        "  unclear = too vague.\n" +
+        "- clarifying_question: one short question if unclear, otherwise empty string.\n" +
+        "- Do not give advice.\n",
+    },
+    ...history,
+    { role: "user", content: safeString({ message, prior_context: contextText }) },
+  ]);
+
   const explicitResourceAsk = userExplicitlyAskedForResources(message);
+  const needsResources = Boolean(intent?.needs_resources) || explicitResourceAsk;
+  const scope = String(intent?.scope || "unclear");
 
   try {
-    // Pure greetings / small talk always stay conversational
-    if (looksLikeSmallTalk(message) && !explicitResourceAsk) {
-      const convo = await openaiJSON(apiKey, [
-        {
-          role: "system",
-          content:
-            "You are SinePatre.\n" +
-            "Tone: calm, measured, mature, slightly conversational.\n" +
-            "Do not list resources unless the user explicitly asks for resources.\n" +
-            "Output JSON only: { \"response\": string }\n" +
-            "Rules:\n" +
-            "- 1 to 3 sentences.\n" +
-            "- No generic speeches.\n",
-        },
-        ...history,
-        { role: "user", content: message },
-      ]);
-
+    // If unclear, ask ONE focused question (prevents unhelpful rambling)
+    if (scope === "unclear") {
+      const q = String(intent?.clarifying_question || "").trim() || "What are you trying to find help with right now?";
       return send(req, res, 200, {
-        mode: "conversation",
-        intro: String(convo?.response || "Hey. What’s on your mind?").trim(),
+        mode: "clarify",
+        intro: q,
         paragraphs: [],
         resources: [],
       });
     }
 
-    // If they did not explicitly ask for resources, stay conversational.
-    if (!explicitResourceAsk) {
+    // If it's a general how-to (not YFN support), do NOT teach steps. Provide places to learn.
+    if (scope === "general_howto") {
+      const goal = String(intent?.user_goal || "Learn how to do something.").trim();
+
+      const out = await openaiJSON(apiKey, [
+        {
+          role: "system",
+          content:
+            "You are Youth Fatherless Network's Resource Navigator.\n" +
+            "The request is a general how-to and NOT in the YFN support database.\n" +
+            "Do NOT explain steps or give a tutorial.\n" +
+            "Provide 2 to 3 reliable places (links) where the user can learn.\n" +
+            "Be concise.\n\n" +
+            "Return JSON only:\n" +
+            '{ "intro": string, "items": [ { "title": string, "url": string, "description": string, "why": string, "nextSteps": string } ] }\n' +
+            "Rules:\n" +
+            "- intro: 2 sentences.\n" +
+            "- items: 2 or 3 items.\n" +
+            "- Each description/why/nextSteps: 1 sentence each.\n" +
+            "- Avoid random links. Use broadly reliable sources.\n",
+        },
+        { role: "user", content: safeString({ user_goal: goal, message }) },
+      ]);
+
+      const items = Array.isArray(out?.items) ? out.items.slice(0, 3) : [];
+      const paragraphs = items.map((it) =>
+        buildCardText({
+          title: it.title,
+          url: it.url,
+          description: it.description,
+          why: it.why,
+          nextSteps: it.nextSteps,
+        })
+      );
+
+      return send(req, res, 200, {
+        mode: "general_howto_resources",
+        intro:
+          String(out?.intro || "I can’t walk you through steps here, but these resources will help you learn.").trim(),
+        paragraphs,
+        resources: items.map((it) => ({ title: it.title, url: it.url, why: "" })),
+      });
+    }
+
+    // YFN support scope
+    // If user is not asking for resources, keep it focused and ask a pinpoint follow-up (no generic speeches).
+    if (!needsResources) {
+      const goal = String(intent?.user_goal || "").trim();
+
       const convo = await openaiJSON(apiKey, [
         {
           role: "system",
           content:
-            "You are SinePatre.\n" +
-            "Tone: calm, measured, mature, slightly conversational.\n" +
-            "Goal: respond thoughtfully to what the user said, using the prior conversation for context.\n" +
-            "Hard rules:\n" +
-            "- Do not list resources unless the user explicitly asks for resources.\n" +
-            "- Do not give medical advice.\n" +
-            "- Do not be overly cheerful.\n" +
-            "Output JSON only: { \"response\": string }\n" +
-            "Rules:\n" +
-            "- 4 to 7 sentences.\n" +
-            "- Be specific and context-aware.\n" +
-            "- End with ONE low-pressure offer like: 'If you want, I can pull a few resources from the database.'\n",
+            "You are Youth Fatherless Network's Resource Navigator.\n" +
+            "Be focused and helpful.\n" +
+            "Do not generate math problems.\n" +
+            "Do not drift to unrelated topics.\n" +
+            "If the user is vague, ask ONE specific follow-up question.\n" +
+            "If the user is describing a situation, reflect it in 1 sentence, then ask 1 focused question.\n" +
+            "No long speeches.\n\n" +
+            "Return JSON only: { \"response\": string }\n",
         },
         ...history,
-        { role: "user", content: message },
+        { role: "user", content: safeString({ user_goal: goal, message }) },
       ]);
 
       return send(req, res, 200, {
-        mode: "conversation",
-        intro: String(convo?.response || "I’m here. Tell me what’s going on, and if you want I can pull a few resources from the database.").trim(),
+        mode: "conversation_focused",
+        intro: String(convo?.response || "What kind of support or resource are you looking for right now?").trim(),
         paragraphs: [],
         resources: [],
       });
     }
 
-    // Resource mode (explicit ask)
-    const resources = await loadResources(csvUrl);
+    // Resource mode: load sheet and pick ONLY best matches
+    const sheetItems = await loadResources(csvUrl);
 
-    // Use current message + recent context to decide tags and ranking
-    const contextText = recentContextText(history, 10);
-
-    const classification = await openaiJSON(apiKey, [
-      {
-        role: "system",
-        content:
-          "Classify what support the user is seeking so we can pick the best database matches.\n" +
-          "Use BOTH the current request and the prior conversation context.\n" +
-          "Output JSON only:\n" +
-          '{ "need_tags": string[], "urgency": "low|medium|high", "focus_summary": string }\n' +
-          "Rules:\n" +
-          "- Tags: therapy, support-group, mentor, grief, school-stress, anxiety, depression, family, identity, talk-now, practical-life, relationships, confidence.\n" +
-          "- focus_summary: 6 to 14 words describing what the user actually wants right now.\n" +
-          "- Do not ask questions.\n" +
-          "- Do not give advice.\n",
-      },
-      ...history,
-      {
-        role: "user",
-        content: safeString({
-          current_request: message,
-          prior_context: contextText,
-        }),
-      },
-    ]);
-
-    const urgency = String(classification.urgency || "low").toLowerCase();
     const queryTokens = tokenize(message);
-
-    // Context tokens: give “tie a tie” and similar things influence
     const contextTokens = tokenize(contextText);
 
-    const tagTokens = tokenize((classification.need_tags || []).join(" "));
-
-    const rankedAll = resources
-      .map((r) => ({ r, s: scoreResource(r, queryTokens, contextTokens, tagTokens, urgency) }))
-      .filter((x) => x.s > 0)
+    const rankedAll = sheetItems
+      .map((r) => ({ r, s: scoreResource(r, queryTokens, contextTokens) }))
       .sort((a, b) => b.s - a.s);
 
-    let ranked = rankedAll;
-    if (urgency !== "high") {
-      ranked = rankedAll.filter((x) => !isCrisisResource(x.r));
-      if (!ranked.length) ranked = rankedAll;
-    }
+    // Take a larger candidate set, then let the model choose ONLY true matches.
+    const candidates = rankedAll.slice(0, 16).map((x) => x.r);
 
-    const limit = 3;
-    const top = (ranked.length ? ranked.slice(0, limit).map((x) => x.r) : resources.slice(0, limit));
-
-    const rewrite = await openaiJSON(apiKey, [
+    const selection = await openaiJSON(apiKey, [
       {
         role: "system",
         content:
-          "You are SinePatre, a resource navigator for fatherless teens.\n" +
-          "The user explicitly asked for resources.\n" +
-          "You must make the recommendations relevant to the prior conversation context.\n\n" +
-          "Hard rules:\n" +
-          "- Use ONLY the provided resource fields. Do not invent facts.\n" +
-          "- Rephrase the content. Do NOT quote or repeat the sheet text verbatim.\n" +
-          "- Do NOT write generic educational preambles.\n" +
-          "- Do NOT include any 'How to start' section.\n" +
-          "- Be mature, astute, and slightly conversational.\n\n" +
-          "Output JSON only: { \"intro\": string, \"paragraphs\": string[] }\n\n" +
-          "Format rules:\n" +
-          "- intro: 2 sentences, specific to the user's request and context (no question).\n" +
-          "- paragraphs: exactly 3 items (one per resource).\n" +
-          "- Each paragraph MUST be:\n" +
-          "  Line 1: 'Resource name: URL'\n" +
-          "  Then 4 to 7 sentences explaining fit using description/best_for/when_to_use/not_for/fatherlessness_connection.\n" +
-          "- No bullets.\n",
+          "You are Youth Fatherless Network's Resource Navigator.\n" +
+          "You must select ONLY the best matching resources from the provided sheet candidates.\n" +
+          "No filler, no unrelated picks.\n\n" +
+          "Return JSON only:\n" +
+          '{ "chosen": [ { "id": string, "title": string, "url": string, "description": string, "why": string, "nextSteps": string } ], "intro": string }\n\n' +
+          "Rules:\n" +
+          "- Choose 1 to 3 resources.\n" +
+          "- If NONE match well, return chosen: [] and intro that asks for the missing detail.\n" +
+          "- 'description' must be a rephrase of the sheet, 1 sentence.\n" +
+          "- 'why' must explicitly connect to what the user asked, 1 sentence.\n" +
+          "- 'nextSteps' must be practical and specific, 1 sentence.\n" +
+          "- Do not invent facts. Use only candidate fields.\n" +
+          "- Keep intro to 2 sentences.\n",
       },
-      ...history,
       {
         role: "user",
         content: safeString({
-          current_request: message,
-          focus_summary: classification.focus_summary || "",
-          sophistication: sophisticated ? "high" : "normal",
-          urgency,
-          need_tags: classification.need_tags || [],
+          user_message: message,
+          user_goal: intent?.user_goal || "",
           prior_context: contextText,
-          resources: top.map((r) => ({
+          candidates: candidates.map((r) => ({
+            id: r.id,
             title: r.title,
             url: r.url,
             description: r.description,
@@ -549,17 +530,36 @@ export default async function handler(req, res) {
       },
     ]);
 
-    const paragraphs = Array.isArray(rewrite?.paragraphs) ? rewrite.paragraphs.slice(0, limit) : [];
-    const intro = String(rewrite?.intro || "").trim();
+    const chosen = Array.isArray(selection?.chosen) ? selection.chosen.slice(0, 3) : [];
+    const intro = String(selection?.intro || "").trim();
 
-    const safeParagraphs = paragraphs.length ? paragraphs : top.map(fallbackParagraphFromFields);
-    const safeIntro = intro || "Here are three options from the database that match what you asked for.";
+    // If nothing matched, ask for the missing detail instead of dumping random resources.
+    if (!chosen.length) {
+      return send(req, res, 200, {
+        mode: "no_match_clarify",
+        intro:
+          intro ||
+          "I’m not seeing a close match in the database yet. What city/state are you in, and what kind of help are you trying to find?",
+        paragraphs: [],
+        resources: [],
+      });
+    }
+
+    const paragraphs = chosen.map((it) =>
+      buildCardText({
+        title: it.title,
+        url: it.url,
+        description: it.description,
+        why: it.why,
+        nextSteps: it.nextSteps,
+      })
+    );
 
     return send(req, res, 200, {
-      mode: "recommendations_paragraphs",
-      intro: safeIntro,
-      paragraphs: safeParagraphs,
-      resources: top.map((r) => ({ title: r.title, url: r.url, why: "" })),
+      mode: "recommendations_structured",
+      intro: intro || "Here are the closest matches from the database for what you described.",
+      paragraphs,
+      resources: chosen.map((it) => ({ title: it.title, url: it.url, why: it.why || "" })),
     });
   } catch (err) {
     const msg = String(err?.message || err);
