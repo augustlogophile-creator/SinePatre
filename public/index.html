@@ -4,225 +4,308 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Youth Fatherless Network — Resource Navigator</title>
+
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=EB+Garamond:wght@400;500;600;700&display=swap');
 
-    :root {
-      --bg: #071a2b;
-      --bg-2: #061525;
+    :root{
+      --bg0: #071b2f;          /* dark navy */
+      --bg1: #061427;          /* deeper */
+      --panel: rgba(255,255,255,0.06);
+      --panel2: rgba(255,255,255,0.08);
+      --stroke: rgba(255,255,255,0.10);
+      --stroke2: rgba(255,255,255,0.14);
+
       --text: rgba(255,255,255,0.92);
-      --muted: rgba(255,255,255,0.66);
-      --card: rgba(255,255,255,0.06);
-      --card-2: rgba(255,255,255,0.08);
-      --border: rgba(255,255,255,0.10);
+      --muted: rgba(255,255,255,0.68);
 
-      --accent: #214f9c;
-      --accent-hover: #1b437f;
+      --chip: rgba(255,255,255,0.07);
+      --chipStroke: rgba(255,255,255,0.10);
 
-      --danger: rgba(214, 69, 69, 0.16);
-      --danger-border: rgba(214, 69, 69, 0.35);
-      --danger-text: rgba(255, 170, 170, 0.95);
+      --blue: #2f7af5;
+      --blueHover: #2466d2;
+
+      --dangerBg: rgba(234, 84, 85, 0.14);
+      --dangerStroke: rgba(234, 84, 85, 0.35);
+      --dangerText: rgba(234, 84, 85, 0.95);
+
+      --radius-xl: 22px;
+      --radius-lg: 18px;
+      --radius-md: 14px;
     }
 
-    * { box-sizing: border-box; }
+    *{ box-sizing:border-box; }
 
-    html, body {
-      height: 100%;
-      margin: 0;
-      padding: 0;
+    html, body{
+      height:100%;
+      margin:0;
+      padding:0;
     }
 
-    body {
-      font-family: Georgia, serif;
-      background: radial-gradient(1200px 700px at 50% 35%, rgba(255,255,255,0.07), transparent 55%),
-                  linear-gradient(180deg, var(--bg), var(--bg-2));
+    body{
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
       color: var(--text);
-      letter-spacing: -0.01em;
-      line-height: 1.6;
+      background:
+        radial-gradient(1100px 700px at 50% 20%, rgba(255,255,255,0.06), transparent 60%),
+        radial-gradient(900px 600px at 15% 10%, rgba(47,122,245,0.10), transparent 55%),
+        radial-gradient(900px 700px at 85% 5%, rgba(47,122,245,0.08), transparent 55%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      overflow-x:hidden;
     }
 
-    .app { min-height: 100vh; }
+    .app{
+      min-height:100vh;
+      position:relative;
+    }
 
-    .center {
-      width: min(860px, 100%);
+    .center{
+      width: min(980px, 100%);
       margin: 0 auto;
       padding: 0 20px;
     }
 
-    .landing {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-      padding: 20px;
-      text-align: center;
-      padding-bottom: 280px;
+    /* LANDING */
+    .landing{
+      min-height:100vh;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      padding: 40px 0 200px; /* leave room for composer */
     }
 
-    .title {
-      font-family: "EB Garamond", Georgia, serif;
-      font-size: clamp(44px, 6.2vw, 66px);
-      font-weight: 650;
+    .brand{
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-weight: 500;
       letter-spacing: -0.02em;
-      margin: 0 0 14px 0;
-      color: rgba(255,255,255,0.94);
+      font-size: clamp(40px, 6.2vw, 74px);
+      margin: 0 0 14px;
+      color: rgba(255,255,255,0.88);
+      text-shadow: 0 20px 60px rgba(0,0,0,0.45);
     }
 
-    .desc {
-      margin: 0 auto 40px;
-      max-width: 680px;
-      color: var(--muted);
+    .desc{
+      max-width: 760px;
+      margin: 0 auto;
       font-size: 16px;
-      line-height: 1.85;
-    }
-
-    .chat {
-      display: none;
-      padding-top: 12px;
-      padding-bottom: 140px;
-    }
-
-    .chat.active { display: block; }
-
-    .messages {
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-      margin-top: 0;
-    }
-
-    .msg-row {
-      display: flex;
-      animation: slideIn 0.2s ease-out;
-    }
-
-    .msg-row.user { justify-content: flex-end; }
-    .msg-row.assistant { justify-content: flex-start; }
-
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .bubble {
-      max-width: min(720px, 96%);
-      padding: 12px 16px;
-      border-radius: 14px;
-      font-size: 18px;
       line-height: 1.8;
-      white-space: pre-wrap;
-      word-wrap: break-word;
+      color: var(--muted);
     }
 
-    .bubble.user {
-      background: rgba(0,0,0,0.22);
+    .desc strong{
+      color: rgba(255,255,255,0.86);
+      font-weight: 600;
+    }
+
+    /* CHAT */
+    .chat{
+      display:none;
+      padding: 22px 0 160px; /* space for fixed composer */
+    }
+    .chat.active{ display:block; }
+
+    .messages{
+      display:flex;
+      flex-direction:column;
+      gap: 18px;
+    }
+
+    .msg-row{
+      display:flex;
+      animation: slideIn 0.18s ease-out;
+    }
+    .msg-row.user{ justify-content:flex-end; }
+    .msg-row.assistant{ justify-content:flex-start; }
+
+    @keyframes slideIn{
+      from{ opacity:0; transform: translateY(6px); }
+      to{ opacity:1; transform: translateY(0); }
+    }
+
+    .bubble{
+      max-width: min(820px, 96%);
+      border-radius: var(--radius-lg);
+      line-height: 1.75;
+      font-size: 16px;
+      word-wrap: break-word;
+      overflow-wrap: anywhere;
+    }
+
+    .bubble.user{
+      padding: 14px 16px;
+      background: rgba(255,255,255,0.07);
       border: 1px solid rgba(255,255,255,0.10);
       color: rgba(255,255,255,0.92);
+      box-shadow: 0 18px 45px rgba(0,0,0,0.28);
     }
 
-    .bubble.assistant {
+    .bubble.assistant{
+      padding: 0;
       background: transparent;
-      color: rgba(255,255,255,0.92);
-      padding-left: 0;
-      padding-right: 0;
-      border-radius: 0;
+      border: none;
+      color: rgba(255,255,255,0.90);
     }
 
-    .bubble.assistant a {
-      color: rgba(190, 215, 255, 0.98);
+    /* Assistant rich block */
+    .rec-wrap{
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: var(--radius-xl);
+      padding: 16px 16px 8px;
+      box-shadow: 0 22px 70px rgba(0,0,0,0.30);
+    }
+
+    .rec-intro{
+      margin: 0 0 10px;
+      color: rgba(255,255,255,0.86);
+      font-size: 16px;
+      line-height: 1.7;
+    }
+
+    .rec-card{
+      background: rgba(255,255,255,0.045);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 18px;
+      padding: 14px 14px 12px;
+      margin: 10px 0 0;
+    }
+
+    .rec-title{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .rec-title strong{
+      font-family: "EB Garamond", Georgia, "Times New Roman", serif;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      font-size: 20px;
+      color: rgba(255,255,255,0.92);
+      margin: 0;
+    }
+
+    .rec-link{
+      color: rgba(255,255,255,0.86);
       text-decoration: underline;
       text-underline-offset: 3px;
+      text-decoration-thickness: 1px;
+      font-weight: 600;
+      font-size: 13px;
+      opacity: 0.9;
+      white-space: nowrap;
     }
-    .bubble.assistant a:hover {
-      color: rgba(220, 235, 255, 1);
+    .rec-link:hover{
+      opacity: 1;
+      text-decoration-thickness: 2px;
     }
 
-    .composer-shell {
+    .rec-grid{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .rec-row{
+      color: rgba(255,255,255,0.80);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+    .rec-row b{
+      color: rgba(255,255,255,0.92);
+      font-weight: 700;
+    }
+
+    /* COMPOSER (fixed) */
+    .composer-shell{
       position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
+      left:0;
+      right:0;
+      bottom:0;
       padding: 18px 0 22px;
-      background: transparent;
-      border-top: none;
-      transition: all 0.3s ease;
+      z-index: 50;
+      pointer-events: none; /* allow only inner to receive clicks */
+      background: linear-gradient(180deg, transparent, rgba(0,0,0,0.22));
     }
+    .composer-shell .center{ pointer-events: auto; }
 
-    .composer-shell.active {
-      background: rgba(6, 21, 37, 0.85);
-      backdrop-filter: blur(10px);
-      border-top: 1px solid rgba(255,255,255,0.08);
-    }
-
-    .input-bar {
-      display: grid;
-      grid-template-columns: 1fr auto auto;
-      gap: 10px;
-      align-items: flex-end;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid var(--border);
+    .input-shell{
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
       border-radius: 18px;
-      padding: 12px 14px;
-      transition: all 0.2s ease;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 30px 80px rgba(0,0,0,0.35);
+      overflow:hidden;
     }
 
-    .input-bar:focus-within {
-      border-color: rgba(190, 215, 255, 0.35);
-      background: rgba(255,255,255,0.07);
+    .input-top{
+      display:grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 12px;
+      align-items:center;
+      padding: 14px 14px;
     }
 
-    textarea {
-      width: 100%;
-      border: none;
-      outline: none;
+    textarea{
+      width:100%;
+      border:none;
+      outline:none;
       background: transparent;
-      color: var(--text);
-      font-family: Georgia, serif;
+      color: rgba(255,255,255,0.92);
       font-size: 16px;
       line-height: 1.5;
-      resize: none;
-      min-height: 22px;
-      max-height: 110px;
-      padding: 4px 0;
-      font-weight: 400;
+      resize:none;
+      min-height: 26px;
+      max-height: 120px;
+      padding: 2px 0;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
     }
+    textarea::placeholder{ color: rgba(255,255,255,0.50); }
 
-    textarea::placeholder {
-      color: rgba(255,255,255,0.55);
-      font-weight: 400;
-    }
-
-    .btn {
-      width: 38px;
-      height: 38px;
+    .icon-btn{
+      width: 40px;
+      height: 40px;
       border-radius: 12px;
       border: 1px solid rgba(255,255,255,0.10);
-      background: rgba(255,255,255,0.88);
-      color: rgba(0,0,0,0.85);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      flex-shrink: 0;
-      padding: 0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      transition: all 0.18s ease;
+      user-select:none;
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.85);
+    }
+    .icon-btn:hover{ background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.14); }
+    .icon-btn:disabled{ opacity:0.55; cursor:not-allowed; }
+
+    .danger-btn{
+      background: var(--dangerBg);
+      border-color: var(--dangerStroke);
+      color: var(--dangerText);
+    }
+    .danger-btn:hover{
+      background: rgba(234, 84, 85, 0.20);
+      border-color: rgba(234, 84, 85, 0.45);
     }
 
-    .btn:hover:not(:disabled) {
-      background: rgba(255,255,255,0.96);
-      transform: translateY(-1px);
+    .send-btn{
+      background: rgba(255,255,255,0.90);
+      color: rgba(0,0,0,0.86);
+      border-color: rgba(255,255,255,0.95);
+    }
+    .send-btn:hover{
+      background: rgba(255,255,255,0.98);
+      border-color: rgba(255,255,255,1);
     }
 
-    .btn:disabled {
-      opacity: 0.55;
-      cursor: not-allowed;
-      transform: none;
-    }
-
-    .btn svg {
-      width: 16px;
-      height: 16px;
+    .icon-btn svg{
+      width: 18px;
+      height: 18px;
       stroke: currentColor;
       stroke-width: 2.2;
       fill: none;
@@ -230,83 +313,46 @@
       stroke-linejoin: round;
     }
 
-    .help-btn-inline {
-      width: 38px;
-      height: 38px;
-      border-radius: 12px;
-      border: 1px solid var(--danger-border);
-      background: var(--danger);
-      color: var(--danger-text);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      flex-shrink: 0;
-      padding: 0;
-      text-decoration: none;
-      position: relative;
+    .input-bottom{
+      padding: 10px 14px 12px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.46);
+      font-size: 12.5px;
+      line-height: 1.4;
+      min-height: 22px; /* prevents layout jump without creating a “bar” */
     }
 
-    .help-btn-inline:hover {
-      background: rgba(214, 69, 69, 0.22);
-      transform: translateY(-1px);
+    .status{
+      display:none;
+    }
+    .status.show{
+      display:block;
     }
 
-    .help-btn-inline svg {
-      width: 16px;
-      height: 16px;
-      fill: currentColor;
+    /* Responsive */
+    @media (max-width: 640px){
+      .center{ padding: 0 14px; }
+      .landing{ padding-bottom: 220px; }
+      .desc{ font-size: 15px; }
+      .rec-title strong{ font-size: 19px; }
     }
 
-    .help-btn-inline::after {
-      content: 'TeenLine';
-      position: absolute;
-      bottom: -28px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.85);
-      color: white;
-      padding: 5px 9px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-family: Georgia, serif;
-      font-weight: 400;
-      white-space: nowrap;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s ease;
-      z-index: 10;
-    }
-
-    .help-btn-inline:hover::after { opacity: 1; }
-
-    .status {
-      margin-top: 10px;
-      color: rgba(255,255,255,0.62);
-      font-size: 14px;
-      min-height: 18px;
-    }
-
-    @media (max-width: 640px) {
-      .center { padding: 0 16px; }
-      .bubble.assistant { max-width: 100%; }
-    }
-
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+    /* Scrollbar */
+    ::-webkit-scrollbar{ width: 6px; }
+    ::-webkit-scrollbar-track{ background: transparent; }
+    ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.12); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover{ background: rgba(255,255,255,0.18); }
   </style>
 </head>
+
 <body>
   <div class="app">
     <div class="center">
-      <section id="landing" class="landing">
-        <h1 class="title">Youth Fatherless Network</h1>
+      <section id="landing" class="landing" aria-label="Landing">
+        <h1 class="brand">Youth Fatherless Network</h1>
         <p class="desc">
-          Describe what you need, and this tool will help you locate relevant resources from Youth Fatherless Network’s database.
-          You can ask follow-ups, clarify what you mean, and narrow options until you find what fits.
+          Describe what you need, and this tool will chat with you to help locate the most relevant resources from
+          <strong>YFN’s database</strong>. You can ask follow-up questions, and it will return the best matches with links.
         </p>
       </section>
 
@@ -315,34 +361,42 @@
       </section>
     </div>
 
-    <div class="composer-shell">
+    <!-- Fixed composer -->
+    <div class="composer-shell" aria-label="Message composer">
       <div class="center">
-        <div class="input-bar" role="group" aria-label="Message composer">
-          <textarea
-            id="input"
-            placeholder="Ask anything…"
-            rows="1"
-            autocomplete="off"
-            spellcheck="true"
-          ></textarea>
+        <div class="input-shell">
+          <div class="input-top">
+            <textarea
+              id="input"
+              placeholder="Ask anything…"
+              rows="1"
+              autocomplete="off"
+              spellcheck="true"
+            ></textarea>
 
-          <a
-            id="help-btn-inline"
-            href="https://didihirsch.org/teenline/"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="help-btn-inline"
-            aria-label="Open Teen Line"
-            title="Teen Line"
-          >
-            <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" fill="currentColor"/></svg>
-          </a>
+            <!-- Crisis button -->
+            <button id="help-btn" class="icon-btn danger-btn" type="button" title="Teen Line (immediate support)">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 9v4" />
+                <path d="M12 17h.01" />
+                <path d="M10.3 4.6 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.6a2 2 0 0 0-3.4 0Z"/>
+              </svg>
+            </button>
 
-          <button id="send-btn" class="btn" title="Send message" aria-label="Send message">
-            <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          </button>
+            <!-- Send -->
+            <button id="send-btn" class="icon-btn send-btn" type="button" title="Send">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12h14" />
+                <path d="M12 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="input-bottom">
+            <div id="status" class="status"></div>
+            <div id="hint">Enter to send, Shift + Enter for a new line.</div>
+          </div>
         </div>
-        <div id="status" class="status"></div>
       </div>
     </div>
   </div>
@@ -353,109 +407,135 @@
     const messagesEl = document.getElementById('messages');
     const inputEl = document.getElementById('input');
     const sendBtn = document.getElementById('send-btn');
+    const helpBtn = document.getElementById('help-btn');
     const statusEl = document.getElementById('status');
-    const composerShell = document.querySelector('.composer-shell');
 
     let history = [];
     let started = false;
 
-    function autoGrowTextarea() {
+    function autoGrowTextarea(){
       inputEl.style.height = 'auto';
-      inputEl.style.height = Math.min(inputEl.scrollHeight, 110) + 'px';
+      inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
     }
 
-    function startChatLayoutIfNeeded() {
+    function startChatLayoutIfNeeded(){
       if (started) return;
       started = true;
       landingEl.style.display = 'none';
       chatEl.classList.add('active');
-      composerShell.classList.add('active');
     }
 
-    function escapeHtml(s) {
-      return String(s)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+    function setStatus(text){
+      const t = String(text || '').trim();
+      if (!t){
+        statusEl.textContent = '';
+        statusEl.classList.remove('show');
+        return;
+      }
+      statusEl.textContent = t;
+      statusEl.classList.add('show');
     }
 
-    // Minimal Markdown: **bold** + auto-link URLs
-    function renderAssistantText(raw) {
-      let s = escapeHtml(raw);
-
-      // Bold: **text**
-      s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-
-      // Auto-link URLs
-      s = s.replace(
-        /(https?:\/\/[^\s<]+)/g,
-        (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer">${m}</a>`
-      );
-
-      // Preserve newlines
-      s = s.replace(/\n/g, "<br>");
-      return s;
+    function scrollToBottom(){
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' });
     }
 
-    function addMessage(role, content) {
+    function addMessage(role, content){
       const row = document.createElement('div');
       row.className = `msg-row ${role}`;
 
       const bubble = document.createElement('div');
       bubble.className = `bubble ${role}`;
 
-      if (role === 'assistant') {
-        bubble.innerHTML = renderAssistantText(String(content || ''));
-      } else {
-        bubble.textContent = String(content || '');
-      }
+      // Default: plain text
+      bubble.textContent = String(content || '');
 
       row.appendChild(bubble);
       messagesEl.appendChild(row);
-
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' });
+      scrollToBottom();
       return row;
     }
 
-    function setAssistantBubble(row, content) {
-      const bubble = row.querySelector('.bubble.assistant');
-      if (!bubble) return;
-      bubble.innerHTML = renderAssistantText(String(content || ''));
-    }
+    function addRecommendations(payload){
+      const row = document.createElement('div');
+      row.className = 'msg-row assistant';
 
-    function setStatus(text) {
-      statusEl.textContent = text || '';
-    }
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble assistant';
 
-    function normalizeToText(x) {
-      if (typeof x === 'string') return x;
-      if (!x) return '';
-      if (typeof x === 'number' || typeof x === 'boolean') return String(x);
-      if (typeof x === 'object') {
-        if (typeof x.text === 'string') return x.text;
-        if (typeof x.content === 'string') return x.content;
-        try { return JSON.stringify(x); } catch { return String(x); }
-      }
-      return String(x);
-    }
+      const wrap = document.createElement('div');
+      wrap.className = 'rec-wrap';
 
-    function formatParagraphResponse(data) {
-      const parts = [];
-      if (data && data.intro) parts.push(normalizeToText(data.intro).trim());
-
-      if (Array.isArray(data.paragraphs) && data.paragraphs.length) {
-        const cleaned = data.paragraphs
-          .map(p => normalizeToText(p).trim())
-          .filter(Boolean);
-        if (cleaned.length) parts.push(cleaned.join("\n\n"));
+      if (payload.intro){
+        const intro = document.createElement('p');
+        intro.className = 'rec-intro';
+        intro.textContent = payload.intro;
+        wrap.appendChild(intro);
       }
 
-      return parts.filter(Boolean).join("\n\n").trim();
+      const items = Array.isArray(payload.items) ? payload.items : [];
+
+      for (const item of items){
+        const card = document.createElement('div');
+        card.className = 'rec-card';
+
+        const titleRow = document.createElement('div');
+        titleRow.className = 'rec-title';
+
+        const title = document.createElement('strong');
+        title.textContent = item.title || 'Resource';
+
+        const link = document.createElement('a');
+        link.className = 'rec-link';
+        link.href = item.url || '#';
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.textContent = 'Open link';
+
+        titleRow.appendChild(title);
+        titleRow.appendChild(link);
+        card.appendChild(titleRow);
+
+        const grid = document.createElement('div');
+        grid.className = 'rec-grid';
+
+        const d = document.createElement('div');
+        d.className = 'rec-row';
+        d.innerHTML = '<b>Description:</b> ' + escapeHtml(item.description || '');
+
+        const w = document.createElement('div');
+        w.className = 'rec-row';
+        w.innerHTML = '<b>Why it matches what you’re looking for:</b> ' + escapeHtml(item.why || '');
+
+        const n = document.createElement('div');
+        n.className = 'rec-row';
+        n.innerHTML = '<b>Next steps:</b> ' + escapeHtml(item.next_steps || '');
+
+        grid.appendChild(d);
+        grid.appendChild(w);
+        grid.appendChild(n);
+        card.appendChild(grid);
+
+        wrap.appendChild(card);
+      }
+
+      bubble.appendChild(wrap);
+      row.appendChild(bubble);
+      messagesEl.appendChild(row);
+      scrollToBottom();
+      return row;
     }
 
-    async function send() {
+    function escapeHtml(str){
+      return String(str || '')
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;')
+        .replaceAll('"','&quot;')
+        .replaceAll("'","&#039;");
+    }
+
+    async function send(){
       const msg = inputEl.value.trim();
       if (!msg) return;
 
@@ -464,14 +544,16 @@
 
       inputEl.value = '';
       inputEl.style.height = 'auto';
+
       sendBtn.disabled = true;
-      setStatus('Thinking...');
+      setStatus('Thinking…');
 
       history.push({ role: 'user', content: msg });
 
-      const pendingRow = addMessage('assistant', 'Thinking...');
+      // Show a temporary assistant line
+      const pendingRow = addMessage('assistant', 'Thinking…');
 
-      try {
+      try{
         const res = await fetch('/api/navigate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -485,21 +567,33 @@
 
         const data = await res.json().catch(() => ({}));
 
-        if (!res.ok || data.error) {
-          const detail = data && (data.detail || data.hint) ? `\n\n${data.detail || data.hint}` : '';
-          setAssistantBubble(pendingRow, `Something went wrong.${detail}`);
+        // Remove the pending row
+        pendingRow.remove();
+
+        if (!res.ok || data.error){
+          const detail = (data && (data.detail || data.hint)) ? ` ${data.detail || data.hint}` : '';
+          addMessage('assistant', 'Something went wrong.' + detail);
           setStatus('');
         } else {
-          const text = formatParagraphResponse(data) || 'I did not get a usable response. Try again.';
-          setAssistantBubble(pendingRow, text);
+          // Prefer structured recommendations when available
+          if (data && Array.isArray(data.items) && data.items.length){
+            addRecommendations(data);
+          } else {
+            const text = (data && (data.intro || data.response)) ? String(data.intro || data.response) : 'I did not get a usable response. Try again.';
+            addMessage('assistant', text);
+          }
           setStatus('');
-          history.push({ role: 'assistant', content: text });
+          // Keep history consistent as plain text for the model
+          if (data && Array.isArray(data.items) && data.items.length){
+            const compact = data.items.map(x => `${x.title}: ${x.url}`).join(' | ');
+            history.push({ role: 'assistant', content: (data.intro ? data.intro + ' ' : '') + compact });
+          } else {
+            history.push({ role: 'assistant', content: String((data.intro || data.response) || '').trim() });
+          }
         }
-      } catch (err) {
-        setAssistantBubble(
-          pendingRow,
-          'Connection error. Open DevTools → Network and confirm /api/navigate returns JSON.'
-        );
+      } catch (err){
+        pendingRow.remove();
+        addMessage('assistant', 'Connection error. Open DevTools → Network and confirm /api/navigate returns JSON.');
         setStatus('');
       }
 
@@ -507,15 +601,20 @@
       inputEl.focus();
     }
 
+    // Buttons must work
+    sendBtn.addEventListener('click', () => send());
+    helpBtn.addEventListener('click', () => {
+      window.open('https://didihirsch.org/teenline/', '_blank', 'noopener');
+    });
+
     inputEl.addEventListener('input', autoGrowTextarea);
     inputEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.key === 'Enter' && !e.shiftKey){
         e.preventDefault();
         send();
       }
     });
 
-    sendBtn.addEventListener('click', send);
     autoGrowTextarea();
     inputEl.focus();
   </script>
