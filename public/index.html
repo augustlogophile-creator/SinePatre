@@ -3,332 +3,310 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title> YFN AI Resource Navigator</title>
-
+  <title>Youth Fatherless Network — Resource Navigator</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&display=swap');
 
-    :root{
-      /* Dark navy (not black) */
-      --bg:#071625;
-      --panel:#0b1d2f;
-      --panel-2:#081a2a;
+    :root {
+      --bg: #071a2b;
+      --bg-2: #061525;
+      --text: rgba(255,255,255,0.92);
+      --muted: rgba(255,255,255,0.66);
+      --card: rgba(255,255,255,0.06);
+      --card-2: rgba(255,255,255,0.08);
+      --border: rgba(255,255,255,0.10);
 
-      --border:rgba(255,255,255,.10);
-      --border-2:rgba(255,255,255,.07);
+      --accent: #214f9c;
+      --accent-hover: #1b437f;
 
-      --text:rgba(255,255,255,.92);
-      --muted:rgba(255,255,255,.62);
-      --muted-2:rgba(255,255,255,.48);
-
-      --danger:#ff5a66;
-      --danger-bg:rgba(255,90,102,.12);
-
-      --shadow: 0 18px 50px rgba(0,0,0,.50);
-      --radius-xl: 22px;
+      --danger: rgba(214, 69, 69, 0.16);
+      --danger-border: rgba(214, 69, 69, 0.35);
+      --danger-text: rgba(255, 170, 170, 0.95);
     }
 
-    *{ box-sizing:border-box; }
-    html,body{ height:100%; margin:0; padding:0; }
-    body{
-      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-      background: var(--bg);
+    * { box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: Georgia, serif;
+      background: radial-gradient(1200px 700px at 50% 35%, rgba(255,255,255,0.07), transparent 55%),
+                  linear-gradient(180deg, var(--bg), var(--bg-2));
       color: var(--text);
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-      overflow-x:hidden;
+      letter-spacing: -0.01em;
+      line-height: 1.6;
     }
 
-    .bg-glow{
-      position:fixed;
-      inset:-20%;
-      pointer-events:none;
-      background:
-        radial-gradient(820px 460px at 50% 20%, rgba(255,255,255,.07), transparent 62%),
-        radial-gradient(900px 560px at 20% 82%, rgba(255,255,255,.04), transparent 64%),
-        radial-gradient(900px 560px at 85% 78%, rgba(255,255,255,.03), transparent 66%);
-      opacity:.9;
-    }
+    .app { min-height: 100vh; }
 
-    .app{ min-height:100vh; position:relative; }
-
-    .center{
-      width: min(980px, 100%);
+    .center {
+      width: min(860px, 100%);
       margin: 0 auto;
-      padding: 0 18px;
+      padding: 0 20px;
     }
 
-    /* Landing */
-    .landing{
+    .landing {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
       min-height: 100vh;
-      padding: 120px 0 260px;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:center;
-      text-align:center;
+      padding: 20px;
+      text-align: center;
+      padding-bottom: 280px;
     }
 
-    .brand{
-      font-size: clamp(44px, 6vw, 70px);
-      letter-spacing: -0.04em;
-      margin: 0 0 18px;
-      font-weight: 600;
-      color: rgba(255,255,255,.90);
+    .title {
+      font-family: "EB Garamond", Georgia, serif;
+      font-size: clamp(44px, 6.2vw, 66px);
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      margin: 0 0 14px 0;
+      color: rgba(255,255,255,0.94);
     }
 
-    .desc{
-      max-width: 760px;
-      margin: 0 auto;
+    .desc {
+      margin: 0 auto 40px;
+      max-width: 680px;
       color: var(--muted);
-      font-size: 15.5px;
-      line-height: 1.9;
-      font-weight: 400;
-    }
-
-    /* Chat */
-    .chat{ display:none; padding: 26px 0 170px; }
-    .chat.active{ display:block; }
-
-    .messages{
-      display:flex;
-      flex-direction:column;
-      gap: 18px;
-      padding-top: 10px;
-    }
-
-    .msg-row{
-      display:flex;
-      animation: fadeUp .18s ease-out;
-    }
-    .msg-row.user{ justify-content:flex-end; }
-    .msg-row.assistant{ justify-content:flex-start; }
-
-    @keyframes fadeUp{
-      from{ opacity:0; transform: translateY(6px); }
-      to{ opacity:1; transform: translateY(0); }
-    }
-
-    .bubble{
-      max-width: min(820px, 96%);
-      padding: 12px 14px;
-      border-radius: 16px;
       font-size: 16px;
-      line-height: 1.75;
+      line-height: 1.85;
+    }
+
+    .chat {
+      display: none;
+      padding-top: 12px;
+      padding-bottom: 140px;
+    }
+
+    .chat.active { display: block; }
+
+    .messages {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      margin-top: 0;
+    }
+
+    .msg-row {
+      display: flex;
+      animation: slideIn 0.2s ease-out;
+    }
+
+    .msg-row.user { justify-content: flex-end; }
+    .msg-row.assistant { justify-content: flex-start; }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .bubble {
+      max-width: min(720px, 96%);
+      padding: 12px 16px;
+      border-radius: 14px;
+      font-size: 18px;
+      line-height: 1.8;
       white-space: pre-wrap;
       word-wrap: break-word;
     }
 
-    .bubble.user{
-      background: rgba(255,255,255,.06);
-      border: 1px solid var(--border);
-      color: rgba(255,255,255,.90);
+    .bubble.user {
+      background: rgba(0,0,0,0.22);
+      border: 1px solid rgba(255,255,255,0.10);
+      color: rgba(255,255,255,0.92);
     }
 
-    .bubble.assistant{
+    .bubble.assistant {
       background: transparent;
-      border: none;
+      color: rgba(255,255,255,0.92);
       padding-left: 0;
       padding-right: 0;
       border-radius: 0;
-      color: rgba(255,255,255,.90);
     }
 
-    /* Composer */
-    .composer-shell{
+    .bubble.assistant a {
+      color: rgba(190, 215, 255, 0.98);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    .bubble.assistant a:hover {
+      color: rgba(220, 235, 255, 1);
+    }
+
+    .composer-shell {
       position: fixed;
       left: 0;
       right: 0;
       bottom: 0;
       padding: 18px 0 22px;
       background: transparent;
-      transition: background .25s ease, border-color .25s ease, backdrop-filter .25s ease;
-      z-index: 9999; /* ensure it's clickable above any embeds/edit UI */
-      pointer-events: auto;
+      border-top: none;
+      transition: all 0.3s ease;
     }
 
-    .composer-shell.active{
-      background: rgba(7,22,37,.72);
+    .composer-shell.active {
+      background: rgba(6, 21, 37, 0.85);
       backdrop-filter: blur(10px);
-      border-top: 1px solid rgba(255,255,255,.06);
+      border-top: 1px solid rgba(255,255,255,0.08);
     }
 
-    .composer{
-      background: rgba(255,255,255,.05);
-      border: 1px solid var(--border-2);
-      border-radius: var(--radius-xl);
-      box-shadow: var(--shadow);
-      overflow:hidden;
-      pointer-events: auto;
+    .input-bar {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 10px;
+      align-items: flex-end;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 12px 14px;
+      transition: all 0.2s ease;
     }
 
-    .composer-top{
-      display:flex;
-      gap: 14px;
-      padding: 14px 14px 10px;
-      align-items:flex-start;
+    .input-bar:focus-within {
+      border-color: rgba(190, 215, 255, 0.35);
+      background: rgba(255,255,255,0.07);
     }
 
-    textarea{
-      flex:1;
-      width:100%;
-      border:none;
-      outline:none;
+    textarea {
+      width: 100%;
+      border: none;
+      outline: none;
       background: transparent;
       color: var(--text);
-      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-family: Georgia, serif;
       font-size: 16px;
-      line-height: 1.55;
-      resize:none;
-      min-height: 26px;
-      max-height: 120px;
-      padding: 6px 4px;
+      line-height: 1.5;
+      resize: none;
+      min-height: 22px;
+      max-height: 110px;
+      padding: 4px 0;
       font-weight: 400;
     }
 
-    textarea::placeholder{
-      color: rgba(255,255,255,.46);
+    textarea::placeholder {
+      color: rgba(255,255,255,0.55);
+      font-weight: 400;
     }
 
-    .composer-actions{
-      display:flex;
-      align-items:center;
-      gap: 10px;
-      padding-top: 2px;
-      pointer-events: auto;
-    }
-
-    .icon-btn{
+    .btn {
       width: 38px;
       height: 38px;
       border-radius: 12px;
-      border: 1px solid var(--border-2);
-      background: rgba(255,255,255,.04);
-      color: rgba(255,255,255,.82);
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      cursor:pointer;
-      transition: background .18s ease, border-color .18s ease, transform .18s ease;
-      flex-shrink:0;
-      text-decoration:none;
-      user-select:none;
-      -webkit-tap-highlight-color: transparent;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.88);
+      color: rgba(0,0,0,0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+      padding: 0;
     }
 
-    .icon-btn:hover{
-      background: rgba(255,255,255,.08);
-      border-color: rgba(255,255,255,.12);
+    .btn:hover:not(:disabled) {
+      background: rgba(255,255,255,0.96);
       transform: translateY(-1px);
     }
 
-    .icon-btn svg{
-      width: 18px;
-      height: 18px;
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn svg {
+      width: 16px;
+      height: 16px;
       stroke: currentColor;
-      stroke-width: 2.1;
+      stroke-width: 2.2;
       fill: none;
       stroke-linecap: round;
       stroke-linejoin: round;
-      pointer-events: none; /* click the button, not the svg */
     }
 
-    .danger-btn{
-      background: var(--danger-bg);
-      border-color: rgba(255,90,102,.24);
-      color: rgba(255,90,102,.92);
+    .help-btn-inline {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      border: 1px solid var(--danger-border);
+      background: var(--danger);
+      color: var(--danger-text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+      padding: 0;
+      text-decoration: none;
+      position: relative;
     }
 
-    .danger-btn:hover{
-      background: rgba(255,90,102,.18);
-      border-color: rgba(255,90,102,.34);
+    .help-btn-inline:hover {
+      background: rgba(214, 69, 69, 0.22);
+      transform: translateY(-1px);
     }
 
-    .send-btn{
-      width: 40px;
-      height: 40px;
-      border-radius: 999px;
-      border: 1px solid rgba(255,255,255,.14);
-      background: rgba(255,255,255,.92);
-      color: rgba(0,0,0,.88);
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      cursor:pointer;
-      transition: transform .18s ease, opacity .18s ease, background .18s ease;
-      flex-shrink:0;
-      user-select:none;
-      -webkit-tap-highlight-color: transparent;
+    .help-btn-inline svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
     }
 
-    .send-btn:hover:not(:disabled){ transform: translateY(-1px); }
-    .send-btn:disabled{ opacity:.45; cursor:not-allowed; }
-
-    .send-btn svg{
-      width: 18px;
-      height: 18px;
-      stroke: currentColor;
-      stroke-width: 2.3;
-      fill:none;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-      pointer-events:none;
-    }
-
-    .composer-bottom{
-      border-top: 1px solid rgba(255,255,255,.06);
-      padding: 10px 14px 12px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap: 12px;
-    }
-
-    .hint{
-      color: rgba(255,255,255,.46);
-      font-size: 13px;
-      line-height: 1.4;
+    .help-btn-inline::after {
+      content: 'TeenLine';
+      position: absolute;
+      bottom: -28px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.85);
+      color: white;
+      padding: 5px 9px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-family: Georgia, serif;
+      font-weight: 400;
       white-space: nowrap;
-      overflow:hidden;
-      text-overflow: ellipsis;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      z-index: 10;
     }
 
-    .status{
-      color: rgba(255,255,255,.60);
-      font-size: 13px;
+    .help-btn-inline:hover::after { opacity: 1; }
+
+    .status {
+      margin-top: 10px;
+      color: rgba(255,255,255,0.62);
+      font-size: 14px;
       min-height: 18px;
-      text-align:right;
-      flex: 0 0 auto;
     }
 
-    .composer:focus-within{
-      border-color: rgba(255,255,255,.14);
-      background: rgba(255,255,255,.06);
+    @media (max-width: 640px) {
+      .center { padding: 0 16px; }
+      .bubble.assistant { max-width: 100%; }
     }
 
-    @media (max-width: 640px){
-      .center{ padding: 0 14px; }
-      .landing{ padding: 110px 0 240px; }
-      .desc{ font-size: 15px; }
-      .hint{ display:none; }
-    }
-
-    ::-webkit-scrollbar{ width: 6px; }
-    ::-webkit-scrollbar-track{ background: transparent; }
-    ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,.10); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover{ background: rgba(255,255,255,.16); }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
   </style>
 </head>
-
 <body>
-  <div class="bg-glow" aria-hidden="true"></div>
-
   <div class="app">
     <div class="center">
       <section id="landing" class="landing">
-        <h1 class="brand">YFN AI Resource Navigator</h1>
+        <h1 class="title">Youth Fatherless Network</h1>
         <p class="desc">
-         The YFN Resource Navigator is a private tool that helps you find support tailored to what you need. Type what you're looking for or what you're dealing with, and the AI will respond with specific resources pulled from our curated database. Each recommendation includes why it fits and simple next steps to get started.
+          Describe what you need, and this tool will help you locate relevant resources from Youth Fatherless Network’s database.
+          You can ask follow-ups, clarify what you mean, and narrow options until you find what fits.
         </p>
       </section>
 
@@ -337,51 +315,34 @@
       </section>
     </div>
 
-    <div class="composer-shell" id="composer-shell">
+    <div class="composer-shell">
       <div class="center">
-        <div class="composer" role="group" aria-label="Message composer">
-          <div class="composer-top">
-            <textarea
-              id="input"
-              placeholder="Ask anything…"
-              rows="1"
-              autocomplete="off"
-              spellcheck="true"
-            ></textarea>
+        <div class="input-bar" role="group" aria-label="Message composer">
+          <textarea
+            id="input"
+            placeholder="Ask anything…"
+            rows="1"
+            autocomplete="off"
+            spellcheck="true"
+          ></textarea>
 
-            <div class="composer-actions">
-              <!-- Crisis / Teen Line -->
-              <a
-                id="help-btn-inline"
-                class="icon-btn danger-btn"
-                href="https://didihirsch.org/teenline/"
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Teen Line"
-                aria-label="Teen Line"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 9v4"></path>
-                  <path d="M12 17h.01"></path>
-                  <path d="M10.3 3.6 1.9 18.1a1.4 1.4 0 0 0 1.2 2.1h17.8a1.4 1.4 0 0 0 1.2-2.1L13.7 3.6a1.9 1.9 0 0 0-3.4 0Z"></path>
-                </svg>
-              </a>
+          <a
+            id="help-btn-inline"
+            href="https://didihirsch.org/teenline/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="help-btn-inline"
+            aria-label="Open Teen Line"
+            title="Teen Line"
+          >
+            <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" fill="currentColor"/></svg>
+          </a>
 
-              <!-- Send -->
-              <button id="send-btn" class="send-btn" type="button" title="Send" aria-label="Send message">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 12h12"></path>
-                  <path d="M12 6l6 6-6 6"></path>
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          <div class="composer-bottom">
-            <div class="hint">Enter to send, Shift + Enter for a new line.</div>
-            <div id="status" class="status"></div>
-          </div>
+          <button id="send-btn" class="btn" title="Send message" aria-label="Send message">
+            <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
         </div>
+        <div id="status" class="status"></div>
       </div>
     </div>
   </div>
@@ -393,15 +354,14 @@
     const inputEl = document.getElementById('input');
     const sendBtn = document.getElementById('send-btn');
     const statusEl = document.getElementById('status');
-    const composerShell = document.getElementById('composer-shell');
-    const helpBtn = document.getElementById('help-btn-inline');
+    const composerShell = document.querySelector('.composer-shell');
 
     let history = [];
     let started = false;
 
     function autoGrowTextarea() {
       inputEl.style.height = 'auto';
-      inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+      inputEl.style.height = Math.min(inputEl.scrollHeight, 110) + 'px';
     }
 
     function startChatLayoutIfNeeded() {
@@ -410,7 +370,33 @@
       landingEl.style.display = 'none';
       chatEl.classList.add('active');
       composerShell.classList.add('active');
-      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    // Minimal Markdown: **bold** + auto-link URLs
+    function renderAssistantText(raw) {
+      let s = escapeHtml(raw);
+
+      // Bold: **text**
+      s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+
+      // Auto-link URLs
+      s = s.replace(
+        /(https?:\/\/[^\s<]+)/g,
+        (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer">${m}</a>`
+      );
+
+      // Preserve newlines
+      s = s.replace(/\n/g, "<br>");
+      return s;
     }
 
     function addMessage(role, content) {
@@ -419,13 +405,24 @@
 
       const bubble = document.createElement('div');
       bubble.className = `bubble ${role}`;
-      bubble.textContent = String(content || '');
+
+      if (role === 'assistant') {
+        bubble.innerHTML = renderAssistantText(String(content || ''));
+      } else {
+        bubble.textContent = String(content || '');
+      }
 
       row.appendChild(bubble);
       messagesEl.appendChild(row);
 
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' });
       return row;
+    }
+
+    function setAssistantBubble(row, content) {
+      const bubble = row.querySelector('.bubble.assistant');
+      if (!bubble) return;
+      bubble.innerHTML = renderAssistantText(String(content || ''));
     }
 
     function setStatus(text) {
@@ -468,11 +465,11 @@
       inputEl.value = '';
       inputEl.style.height = 'auto';
       sendBtn.disabled = true;
-      setStatus('Thinking…');
+      setStatus('Thinking...');
 
       history.push({ role: 'user', content: msg });
 
-      const pendingRow = addMessage('assistant', 'Thinking…');
+      const pendingRow = addMessage('assistant', 'Thinking...');
 
       try {
         const res = await fetch('/api/navigate', {
@@ -490,17 +487,19 @@
 
         if (!res.ok || data.error) {
           const detail = data && (data.detail || data.hint) ? `\n\n${data.detail || data.hint}` : '';
-          pendingRow.querySelector('.bubble').textContent = `Something went wrong.${detail}`;
+          setAssistantBubble(pendingRow, `Something went wrong.${detail}`);
           setStatus('');
         } else {
           const text = formatParagraphResponse(data) || 'I did not get a usable response. Try again.';
-          pendingRow.querySelector('.bubble').textContent = text;
+          setAssistantBubble(pendingRow, text);
           setStatus('');
           history.push({ role: 'assistant', content: text });
         }
       } catch (err) {
-        pendingRow.querySelector('.bubble').textContent =
-          'Connection error. Open DevTools → Network and confirm /api/navigate returns JSON.';
+        setAssistantBubble(
+          pendingRow,
+          'Connection error. Open DevTools → Network and confirm /api/navigate returns JSON.'
+        );
         setStatus('');
       }
 
@@ -516,19 +515,9 @@
       }
     });
 
-    /* Make absolutely sure click works even if something overlays */
-    sendBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); send(); });
-
-    /* Ensure help link works even if embedded editor tries to swallow clicks */
-    helpBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      // allow normal navigation in a new tab
-    }, { capture: true });
-
+    sendBtn.addEventListener('click', send);
     autoGrowTextarea();
     inputEl.focus();
   </script>
 </body>
 </html>
-
-
