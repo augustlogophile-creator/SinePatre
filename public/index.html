@@ -6,25 +6,30 @@
   <title>Youth Fatherless Network Navigator</title>
   <style>
     :root{
-      --bg:#071a33;               /* solid navy */
+      --bg:#071a33;
       --panel:#0b2444;
       --panel2:#0a213e;
       --text:#eaf0ff;
       --muted:rgba(234,240,255,.72);
       --border:rgba(234,240,255,.12);
-      --shadow:rgba(0,0,0,.35);
+      --shadow:rgba(0,0,0,.38);
       --accent:#ffffff;
       --danger:#ff5a5f;
+      --ok:rgba(255,255,255,.08);
     }
 
     *{ box-sizing:border-box; }
     html,body{ height:100%; }
     body{
       margin:0;
-      background:var(--bg);
       color:var(--text);
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
       overflow:hidden;
+      background:
+        radial-gradient(1200px 600px at 50% -80px, rgba(255,255,255,.10), rgba(255,255,255,0) 55%),
+        radial-gradient(900px 500px at 10% 10%, rgba(255,255,255,.06), rgba(255,255,255,0) 55%),
+        radial-gradient(900px 500px at 90% 20%, rgba(255,255,255,.05), rgba(255,255,255,0) 55%),
+        var(--bg);
     }
 
     .wrap{
@@ -33,8 +38,8 @@
       flex-direction:column;
       align-items:center;
       justify-content:flex-start;
-      padding:44px 18px 18px;
-      gap:18px;
+      padding:40px 18px 18px;
+      gap:16px;
     }
 
     .hero{
@@ -45,15 +50,15 @@
 
     .title{
       margin:0;
-      font-weight:700;
-      letter-spacing:-0.02em;
-      font-size:clamp(28px, 4vw, 58px);
+      font-weight:780;
+      letter-spacing:-0.03em;
+      font-size:clamp(28px, 4vw, 56px);
       line-height:1.05;
     }
 
     .desc{
       margin:14px auto 0;
-      max-width:820px;
+      max-width:860px;
       font-size:clamp(14px, 1.55vw, 18px);
       line-height:1.55;
       color:var(--muted);
@@ -64,24 +69,86 @@
       flex:1;
       display:flex;
       flex-direction:column;
-      border-radius:28px;
+      border-radius:26px;
       background:rgba(255,255,255,.03);
       border:1px solid var(--border);
       box-shadow:0 18px 70px var(--shadow);
       overflow:hidden;
-      min-height:420px;
+      min-height:440px;
+      position:relative;
+    }
+
+    .topBar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:12px 14px;
+      border-bottom:1px solid rgba(234,240,255,.10);
+      background:rgba(255,255,255,.02);
+    }
+
+    .brandMini{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width:0;
+    }
+
+    .dot{
+      width:10px; height:10px;
+      border-radius:999px;
+      background:rgba(255,255,255,.7);
+      box-shadow:0 0 0 4px rgba(255,255,255,.08);
+      flex:0 0 auto;
+    }
+
+    .brandText{
+      font-weight:700;
+      letter-spacing:-0.01em;
+      font-size:14px;
+      opacity:.95;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .topActions{
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+
+    .miniBtn{
+      border:none;
+      outline:none;
+      cursor:pointer;
+      background:rgba(255,255,255,.05);
+      border:1px solid var(--border);
+      color:var(--text);
+      padding:8px 10px;
+      border-radius:12px;
+      font-size:12.5px;
+      font-weight:650;
+      opacity:.95;
+    }
+    .miniBtn:hover{ opacity:1; }
+    .miniBtn:active{ transform:scale(.99); }
+    .miniBtnDanger{
+      background:rgba(255,90,95,.10);
+      border-color:rgba(255,90,95,.28);
+      color:var(--danger);
     }
 
     .messages{
       flex:1;
       overflow:auto;
-      padding:22px 22px 16px;
+      padding:18px 18px 14px;
       scroll-behavior:smooth;
     }
 
     .row{
       display:flex;
-      margin:10px 0;
+      margin:12px 0;
       gap:10px;
     }
     .row.user{ justify-content:flex-end; }
@@ -91,24 +158,32 @@
       max-width:78%;
       border-radius:18px;
       padding:12px 14px;
-      border:1px solid var(--border);
+      border:1px solid rgba(234,240,255,.12);
       background:rgba(255,255,255,.04);
-      line-height:1.5;
+      line-height:1.55;
       font-size:15px;
+      white-space:pre-wrap;
     }
     .row.user .bubble{
-      background:rgba(255,255,255,.06);
+      background:rgba(255,255,255,.07);
+      border-color:rgba(234,240,255,.14);
+    }
+
+    .stack{
+      max-width:92%;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
     }
 
     .cards{
       display:flex;
       flex-direction:column;
       gap:12px;
-      margin-top:12px;
     }
 
     .card{
-      border:1px solid var(--border);
+      border:1px solid rgba(234,240,255,.12);
       background:rgba(255,255,255,.04);
       border-radius:18px;
       padding:14px 14px 12px;
@@ -123,22 +198,27 @@
     }
 
     .cardTitle{
-      font-weight:700;
+      font-weight:760;
       font-size:16px;
       letter-spacing:-0.01em;
       margin:0;
+      line-height:1.25;
     }
 
     .openLink{
       color:var(--text);
-      opacity:.85;
-      text-decoration:underline;
-      text-underline-offset:3px;
-      font-weight:600;
+      opacity:.9;
+      text-decoration:none;
+      font-weight:700;
       white-space:nowrap;
       cursor:pointer;
+      border:1px solid rgba(234,240,255,.14);
+      background:rgba(255,255,255,.05);
+      padding:7px 10px;
+      border-radius:12px;
     }
     .openLink:hover{ opacity:1; }
+    .openLink:active{ transform:scale(.99); }
 
     .cardLine{
       margin:8px 0 0;
@@ -147,23 +227,74 @@
       line-height:1.55;
     }
 
-    .cardLine strong{
+    .label{
       color:var(--text);
+      font-weight:780;
+    }
+
+    .pillRow{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:10px;
+    }
+
+    .pill{
+      font-size:12.5px;
       font-weight:700;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(234,240,255,.12);
+      background:rgba(255,255,255,.04);
+      color:rgba(234,240,255,.9);
+      cursor:pointer;
+      user-select:none;
+    }
+    .pill:hover{ background:rgba(255,255,255,.06); }
+
+    /* Typing indicator */
+    .typing{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:10px 12px;
+      border-radius:16px;
+      border:1px solid rgba(234,240,255,.12);
+      background:rgba(255,255,255,.03);
+      width:fit-content;
+      max-width:78%;
+    }
+    .dots{
+      display:inline-flex;
+      gap:4px;
+      align-items:center;
+    }
+    .dots span{
+      width:6px; height:6px;
+      border-radius:50%;
+      background:rgba(234,240,255,.7);
+      display:inline-block;
+      animation: bounce 1.2s infinite ease-in-out;
+    }
+    .dots span:nth-child(2){ animation-delay:.15s; }
+    .dots span:nth-child(3){ animation-delay:.30s; }
+    @keyframes bounce{
+      0%, 80%, 100% { transform: translateY(0); opacity:.55; }
+      40% { transform: translateY(-4px); opacity:1; }
     }
 
     /* Input area */
     .composer{
-      padding:14px;
-      border-top:1px solid var(--border);   /* subtle, no ugly thick bar */
-      background:rgba(255,255,255,.02);     /* same vibe, still solid navy behind */
+      padding:12px 12px 14px;
+      border-top:1px solid rgba(234,240,255,.10);
+      background:rgba(255,255,255,.02);
     }
 
     .composerInner{
       display:flex;
-      align-items:center;
+      align-items:flex-end;
       gap:10px;
-      border:1px solid var(--border);
+      border:1px solid rgba(234,240,255,.12);
       border-radius:18px;
       padding:10px 10px;
       background:rgba(255,255,255,.035);
@@ -180,7 +311,7 @@
       padding:10px 10px;
       resize:none;
       height:44px;
-      max-height:120px;
+      max-height:140px;
       line-height:1.4;
     }
     .input::placeholder{ color:rgba(234,240,255,.55); }
@@ -196,10 +327,11 @@
       height:44px;
       border-radius:14px;
       background:rgba(255,255,255,.06);
-      border:1px solid var(--border);
+      border:1px solid rgba(234,240,255,.14);
       color:var(--text);
       transition:transform .04s ease, opacity .15s ease;
       user-select:none;
+      flex:0 0 auto;
     }
     .btn:active{ transform:scale(.98); }
     .btn[disabled]{ opacity:.45; cursor:not-allowed; }
@@ -221,13 +353,32 @@
       color:rgba(234,240,255,.52);
       font-size:12.5px;
       padding-left:6px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
     }
 
-    /* mobile tweaks */
+    .toast{
+      position:absolute;
+      left:14px;
+      right:14px;
+      bottom:86px;
+      background:rgba(255,90,95,.14);
+      border:1px solid rgba(255,90,95,.35);
+      color:rgba(234,240,255,.95);
+      border-radius:14px;
+      padding:10px 12px;
+      font-size:13.5px;
+      line-height:1.35;
+      display:none;
+    }
+
     @media (max-width:560px){
       .bubble{ max-width:92%; }
-      .messages{ padding:18px 14px 14px; }
+      .messages{ padding:16px 12px 12px; }
       .chatShell{ border-radius:22px; }
+      .desc{ max-width:92vw; }
     }
   </style>
 </head>
@@ -237,17 +388,28 @@
       <h1 class="title">Youth Fatherless Network</h1>
       <p class="desc">
         Describe what you need, and this will pull the best matching resources from Youth Fatherless Network’s database.
-        You can ask follow-up questions, and it will keep narrowing to what fits.
+        Ask follow ups if you want, and it will keep narrowing to what fits.
       </p>
     </div>
 
     <div class="chatShell" role="region" aria-label="Chat">
+      <div class="topBar">
+        <div class="brandMini">
+          <div class="dot" aria-hidden="true"></div>
+          <div class="brandText">Resource Navigator</div>
+        </div>
+        <div class="topActions">
+          <button id="btnReset" class="miniBtn" type="button" title="Clear chat">Reset</button>
+          <button id="btnCrisisTop" class="miniBtn miniBtnDanger" type="button" title="Get help now">Get help now</button>
+        </div>
+      </div>
+
       <div id="messages" class="messages"></div>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
       <div class="composer">
         <div class="composerInner">
-          <button id="btnCrisis" class="btn btnCrisis" title="Get help now" aria-label="Get help now">
-            <!-- warning icon -->
+          <button id="btnCrisis" class="btn btnCrisis" title="Get help now" aria-label="Get help now" type="button">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M12 9v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
               <path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -255,34 +417,51 @@
             </svg>
           </button>
 
-          <textarea id="input" class="input" placeholder="Ask anything..." rows="1"></textarea>
+          <textarea id="input" class="input" placeholder="What do you need help with?" rows="1"></textarea>
 
-          <button id="btnSend" class="btn btnSend" title="Send" aria-label="Send">
-            <!-- arrow icon -->
+          <button id="btnSend" class="btn btnSend" title="Send" aria-label="Send" type="button">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M5 12h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
               <path d="M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
         </div>
-        <div class="hint">Enter to send, Shift + Enter for a new line.</div>
+
+        <div class="hint">
+          <span>Enter to send, Shift + Enter for a new line.</span>
+          <span id="netHint" style="opacity:.75;"></span>
+        </div>
       </div>
     </div>
   </div>
 
   <script>
-    const API_URL = "/api/navigate"; // adjust if needed
+    const API_URL = "/api/navigate";
 
     const messagesEl = document.getElementById("messages");
     const inputEl = document.getElementById("input");
     const btnSend = document.getElementById("btnSend");
     const btnCrisis = document.getElementById("btnCrisis");
+    const btnCrisisTop = document.getElementById("btnCrisisTop");
+    const btnReset = document.getElementById("btnReset");
+    const toastEl = document.getElementById("toast");
+    const netHint = document.getElementById("netHint");
 
     let history = [];
     let isSending = false;
+    let typingRow = null;
 
     function scrollToBottom(){
       messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function showToast(msg){
+      toastEl.textContent = msg;
+      toastEl.style.display = "block";
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => {
+        toastEl.style.display = "none";
+      }, 3200);
     }
 
     function addBubble(role, text){
@@ -296,69 +475,111 @@
       row.appendChild(bubble);
       messagesEl.appendChild(row);
       scrollToBottom();
+      return row;
     }
 
-    function addCards(cards){
+    function addAssistantStack(replyText, cards){
       const row = document.createElement("div");
       row.className = "row assistant";
 
+      const stack = document.createElement("div");
+      stack.className = "stack";
+
       const bubble = document.createElement("div");
       bubble.className = "bubble";
+      bubble.textContent = replyText;
 
-      const wrap = document.createElement("div");
-      wrap.className = "cards";
+      stack.appendChild(bubble);
 
-      cards.forEach(c => {
-        const card = document.createElement("div");
-        card.className = "card";
+      if (Array.isArray(cards) && cards.length){
+        const wrap = document.createElement("div");
+        wrap.className = "cards";
 
-        const top = document.createElement("div");
-        top.className = "cardTop";
+        cards.forEach(c => {
+          const card = document.createElement("div");
+          card.className = "card";
 
-        const title = document.createElement("h3");
-        title.className = "cardTitle";
-        title.textContent = c.title || "Resource";
+          const top = document.createElement("div");
+          top.className = "cardTop";
 
-        const link = document.createElement("a");
-        link.className = "openLink";
-        link.textContent = "Open link";
-        link.href = c.url || "#";
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
+          const title = document.createElement("h3");
+          title.className = "cardTitle";
+          title.textContent = c.title || "Resource";
 
-        top.appendChild(title);
-        top.appendChild(link);
+          const link = document.createElement("a");
+          link.className = "openLink";
+          link.textContent = "Open link";
+          link.href = c.url || "#";
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
 
-        const desc = document.createElement("p");
-        desc.className = "cardLine";
-        desc.innerHTML = "<strong>Description:</strong> " + (c.description || "");
+          top.appendChild(title);
+          top.appendChild(link);
 
-        const why = document.createElement("p");
-        why.className = "cardLine";
-        why.innerHTML = "<strong>Why it matches what you’re looking for:</strong> " + (c.why || "");
+          const desc = document.createElement("p");
+          desc.className = "cardLine";
+          desc.innerHTML = "<span class='label'>Description:</span> " + (escapeHtml(c.description || ""));
 
-        const next = document.createElement("p");
-        next.className = "cardLine";
-        next.innerHTML = "<strong>Next steps:</strong> " + (c.next_steps || "");
+          const why = document.createElement("p");
+          why.className = "cardLine";
+          why.innerHTML = "<span class='label'>Why it matches:</span> " + (escapeHtml(c.why || ""));
 
-        card.appendChild(top);
-        card.appendChild(desc);
-        card.appendChild(why);
-        card.appendChild(next);
+          const next = document.createElement("p");
+          next.className = "cardLine";
+          next.innerHTML = "<span class='label'>Next steps:</span> " + (escapeHtml(c.next_steps || ""));
 
-        wrap.appendChild(card);
-      });
+          card.appendChild(top);
+          card.appendChild(desc);
+          card.appendChild(why);
+          card.appendChild(next);
 
-      bubble.appendChild(wrap);
-      row.appendChild(bubble);
+          wrap.appendChild(card);
+        });
+
+        stack.appendChild(wrap);
+      }
+
+      row.appendChild(stack);
       messagesEl.appendChild(row);
       scrollToBottom();
+    }
+
+    function escapeHtml(str){
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
     }
 
     function setSending(state){
       isSending = state;
       btnSend.disabled = state;
       btnCrisis.disabled = state;
+      btnCrisisTop.disabled = state;
+      btnReset.disabled = state;
+    }
+
+    function showTyping(){
+      if (typingRow) return;
+      const row = document.createElement("div");
+      row.className = "row assistant";
+
+      const bubble = document.createElement("div");
+      bubble.className = "typing";
+      bubble.innerHTML = "<div class='dots' aria-hidden='true'><span></span><span></span><span></span></div><div style='font-size:13.5px;color:rgba(234,240,255,.85);font-weight:650;'>Searching the database…</div>";
+
+      row.appendChild(bubble);
+      messagesEl.appendChild(row);
+      typingRow = row;
+      scrollToBottom();
+    }
+
+    function hideTyping(){
+      if (!typingRow) return;
+      typingRow.remove();
+      typingRow = null;
     }
 
     async function sendMessage(){
@@ -367,12 +588,14 @@
 
       inputEl.value = "";
       inputEl.style.height = "44px";
+
       addBubble("user", text);
 
       history.push({ role: "user", content: text });
       history = history.slice(-30);
 
       setSending(true);
+      showTyping();
 
       try{
         const res = await fetch(API_URL, {
@@ -381,34 +604,49 @@
           body: JSON.stringify({ message: text, history })
         });
 
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
+        hideTyping();
 
-        // Always add exactly one assistant bubble per response,
-        // then optionally cards. This prevents the duplicated “prompt” look.
+        if (!res.ok){
+          showToast("Server error. Check Vercel logs.");
+          addBubble("assistant", "Sorry, something went wrong on the server.");
+          setSending(false);
+          return;
+        }
+
         const replyText = (data && data.reply) ? String(data.reply) : "Sorry, something went wrong.";
-        addBubble("assistant", replyText);
+        const cards = Array.isArray(data.cards) ? data.cards : [];
+
+        addAssistantStack(replyText, cards);
 
         history.push({ role: "assistant", content: replyText });
         history = history.slice(-30);
-
-        if (Array.isArray(data.cards) && data.cards.length){
-          addCards(data.cards);
-        }
       }catch(e){
+        hideTyping();
+        showToast("Network error. Try again.");
         addBubble("assistant", "Sorry, I couldn’t load resources right now. Please try again.");
       }finally{
         setSending(false);
       }
     }
 
-    // Buttons
-    btnSend.addEventListener("click", sendMessage);
-
-    btnCrisis.addEventListener("click", () => {
+    function openCrisis(){
       window.open("https://didihirsch.org/teenline/", "_blank", "noopener,noreferrer");
-    });
+    }
 
-    // Enter to send, Shift+Enter for newline
+    function resetChat(){
+      messagesEl.innerHTML = "";
+      history = [];
+      hideTyping();
+      localStorage.removeItem("yfn_nav_intro_seen");
+      addIntroIfNeeded();
+    }
+
+    btnSend.addEventListener("click", sendMessage);
+    btnCrisis.addEventListener("click", openCrisis);
+    btnCrisisTop.addEventListener("click", openCrisis);
+    btnReset.addEventListener("click", resetChat);
+
     inputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey){
         e.preventDefault();
@@ -416,14 +654,28 @@
       }
     });
 
-    // Auto-grow textarea
     inputEl.addEventListener("input", () => {
       inputEl.style.height = "44px";
-      inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + "px";
+      inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + "px";
     });
 
-    // Initial assistant message (one time)
-    addBubble("assistant", "Hi. Tell me what you’re looking for, and I’ll pull the best matches from the database.");
+    function addIntroIfNeeded(){
+      const seen = localStorage.getItem("yfn_nav_intro_seen");
+      if (seen) return;
+      localStorage.setItem("yfn_nav_intro_seen", "1");
+      addBubble("assistant", "Tell me what you want help with, and I’ll pull the closest matches from the database.");
+    }
+
+    // Network hint (optional)
+    function updateNetHint(){
+      const online = navigator.onLine;
+      netHint.textContent = online ? "" : "Offline";
+    }
+    window.addEventListener("online", updateNetHint);
+    window.addEventListener("offline", updateNetHint);
+    updateNetHint();
+
+    addIntroIfNeeded();
   </script>
 </body>
 </html>
