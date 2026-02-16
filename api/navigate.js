@@ -1,20 +1,22 @@
 // api/navigate.js - YFN Resource Navigator (Vercel serverless)
 //
-// Guarantees:
-// - ALWAYS returns 1–3 specific resources from the Google Sheet (even for "hey").
-// - NEVER asks follow-up questions.
-// - NEVER invents external links. URLs come ONLY from the sheet.
-// - Response format matches your current frontend: { intro, paragraphs, resources }
+// Behavior goals:
+// 1) Greetings -> polite + ask what they want (NO resources).
+// 2) Specific asks -> find BEST matches from the Google Sheet (1–3).
+// 3) Off-topic / no match -> gentle reminder + ask ONE clarifying question (NO guessing).
+// 4) NEVER invent links. Use ONLY sheet rows.
+// 5) Minimal questions. Ask only if needed.
+// 6) Output format matches frontend: { mode, intro, paragraphs, resources }
 //
 // Env vars required:
 // - OPENAI_API_KEY
 // - GOOGLE_SHEET_CSV_URL (published CSV export link)
 
 const MAX_MESSAGE_LENGTH = 2000;
-const MAX_HISTORY_ITEMS = 40;
+const MAX_HISTORY_ITEMS = 30;
 
 const OPENAI_MODEL = "gpt-4.1";
-const TEMPERATURE = 0.15;
+const TEMPERATURE = 0.2;
 
 const SAFETY_REGEX = [
   /\b(suicide|kill myself|end my life|end it all)\b/i,
@@ -62,13 +64,55 @@ function sanitizeHistory(history) {
     .slice(-MAX_HISTORY_ITEMS);
 }
 
-function recentUserText(history, maxTurns = 14) {
-  const slice = Array.isArray(history) ? history.slice(-maxTurns) : [];
-  return slice
-    .filter((m) => m.role === "user")
-    .map((m) => m.content)
-    .join("\n")
-    .slice(0, 4500);
+function isGreeting(messageNorm) {
+  const t = messageNorm;
+  if (!t) return false;
+  const greetings = new Set(["hi", "hey", "hello", "yo", "sup", "hiya", "hey there"]);
+  if (greetings.has(t)) return true;
+  if (t.length <= 12 && (t.startsWith("hi ") || t.startsWith("hey ") || t.startsWith("hello "))) return true;
+  return false;
+}
+
+function tokenize(text) {
+  const stop = new Set([
+    "the","and","or","but","if","to","of","in","on","for","with","is","are","was","were","be","been","being",
+    "i","me","my","you","your","we","they","this","that","it","a","an","about","from","by","at","as",
+    "im","i'm","dont","don't","cant","can't","so","just","like","really","can","could","would",
+    "please","help","need","want","get","give","show","tell","also","now","thanks","thank","ok","okay"
+  ]);
+
+  return normalize(text)
+    .split(" ")
+    .filter((w) => w.length > 2 && !stop.has(w));
+}
+
+function expandIntentTokens(tokens) {
+  const map = new Map([
+    ["community", ["community","connection","friends","belonging","group","supportgroup","support-group","peer","peers"]],
+    ["talk", ["talk","someone","listener","mentor","counselor","counselling","counseling","therapist","therapy","call","text"]],
+    ["confidence", ["confidence","selfesteem","self-esteem","assertiveness","motivation"]],
+    ["stress", ["stress","overwhelmed","pressure","burnout"]],
+    ["anxiety", ["anxiety","panic","worry"]],
+    ["grief", ["grief","loss","mourning"]],
+    ["family", ["family","parents","dad","father","fatherless","fatherlessness"]],
+    ["school", ["school","grades","class","teacher","bullying"]],
+    ["relationships", ["relationships","dating","breakup"]],
+    ["practical", ["how","howto","how-to","fix","repair","solve","tutorial","guide","steps","learn"]],
+  ]);
+
+  const out = new Set();
+  for (const t of tokens) out.add(t);
+
+  for (const t of tokens) {
+    for (const [k, syns] of map.entries()) {
+      if (t === k || syns.includes(t)) {
+        out.add(k);
+        for (const s of syns) out.add(s);
+      }
+    }
+  }
+
+  return [...out];
 }
 
 // Minimal CSV parser (handles quotes)
@@ -154,60 +198,6 @@ async function loadResources(csvUrl) {
   return items;
 }
 
-function tokenize(text) {
-  const stop = new Set([
-    "the","and","or","but","if","to","of","in","on","for","with","is","are","was","were","be",
-    "been","being","i","me","my","you","your","we","they","this","that","it","a","an","about",
-    "from","by","at","as","im","i'm","dont","don't","cant","can't","so","just","like","really",
-    "can","could","would","please","help","need","want","get","give","show","tell","also","now",
-    "yes","yeah","ok","okay","do","it","thanks","thank","find","me","some","stuff","thing","things",
-    "stop","no","nah"
-  ]);
-
-  return normalize(text)
-    .split(" ")
-    .filter((w) => w.length > 2 && !stop.has(w));
-}
-
-function expandIntentTokens(tokens) {
-  // Practical: “talk to someone” should map to support resources, not a question loop.
-  const map = new Map([
-    ["talk", ["talk","someone","support","listener","peer","mentor","counselor","counselling","counseling","therapy","therapist"]],
-    ["support", ["support","community","peer","group","groups","help","guidance","connect","connection"]],
-    ["community", ["community","peer","group","groups","belonging","local","inperson","in-person"]],
-    ["confidence", ["confidence","selfesteem","self-esteem","assertiveness","motivation","courage"]],
-    ["anxiety", ["anxiety","panic","worry","nervous","stress"]],
-    ["stress", ["stress","overwhelmed","pressure","burnout"]],
-    ["grief", ["grief","loss","mourning"]],
-    ["friends", ["friends","friendship","social","lonely","loneliness"]],
-    ["relationships", ["relationships","dating","breakup","family","parents"]],
-    ["school", ["school","homework","grades","class","teacher","bullying"]],
-    ["mentor", ["mentor","mentorship","coach","rolemodel","role-model"]],
-    ["therapy", ["therapy","therapist","counseling","counselling","mentalhealth","mental-health"]],
-    ["fix", ["fix","repair","howto","how-to","tutorial","guide","skills","life","life-skills"]],
-  ]);
-
-  const out = new Set(tokens.map((t) => t.replace(/[^a-z]/g, "")));
-  for (const t of tokens) {
-    const key = t.replace(/[^a-z]/g, "");
-    if (!key) continue;
-
-    for (const [k, syns] of map.entries()) {
-      if (key === k || syns.includes(key)) {
-        out.add(k);
-        for (const s of syns) out.add(String(s).replace(/[^a-z]/g, ""));
-      }
-    }
-  }
-  return [...out].filter(Boolean);
-}
-
-function inferUrgency(messageNorm) {
-  if (/\b(i want to die|kill myself|end my life|self harm|cut myself)\b/i.test(messageNorm)) return "high";
-  if (/\bpanic|can t breathe|freaking out|urgent\b/i.test(messageNorm)) return "medium";
-  return "low";
-}
-
 function isCrisisResource(resource) {
   const t = `${resource.title} ${resource.description} ${resource.when_to_use}`.toLowerCase();
   return t.includes("crisis") || t.includes("suicide") || t.includes("self-harm") || t.includes("hotline") || t.includes("988");
@@ -225,57 +215,47 @@ function userIndicatedGender(messageNorm, historyNorm) {
          t.includes("i am a boy") || t.includes("i'm a boy") || t.includes("im a boy") || t.includes("male");
 }
 
-function scoreResource(resource, intentTokensExpanded, historyNorm, allowGendered, urgency) {
-  const hayText = normalize(
+function inferUrgency(messageNorm) {
+  if (/\b(i want to die|kill myself|end my life|self harm|cut myself)\b/i.test(messageNorm)) return "high";
+  if (/\bpanic|freaking out|urgent\b/i.test(messageNorm)) return "medium";
+  return "low";
+}
+
+function scoreResource(resource, expandedTokens, allowGendered, urgency) {
+  const hay = normalize(
     `${resource.title} ${resource.description} ${resource.best_for} ${resource.when_to_use} ${resource.not_for} ${resource.fatherlessness_connection}`
   );
-  const hayTokens = new Set(tokenize(hayText).map((t) => t.replace(/[^a-z]/g, "")));
 
+  const hayTokens = new Set(tokenize(hay));
   let score = 0;
 
-  for (const tok of intentTokensExpanded) {
-    const clean = String(tok).replace(/[^a-z]/g, "");
-    if (clean && hayTokens.has(clean)) score += 4;
+  for (const tok of expandedTokens) {
+    if (hayTokens.has(tok)) score += 4;
   }
 
-  // If they want to "talk to someone", heavily prefer support/peer/mentor/therapy style entries
-  const wantsTalk = intentTokensExpanded.includes("talk") || intentTokensExpanded.includes("support");
+  // Prefer “talk to someone” resources when asked
+  const wantsTalk = expandedTokens.includes("talk") || expandedTokens.includes("counseling") || expandedTokens.includes("therapy");
   if (wantsTalk) {
-    const talkWords = ["talk","support","peer","mentor","therapy","therapist","counseling","counselling","group","listener"];
-    for (const w of talkWords) {
-      const c = w.replace(/[^a-z]/g, "");
-      if (hayTokens.has(c)) score += 3;
-    }
-  }
-
-  // Light context assist
-  const ctxTokens = tokenize(historyNorm).map((t) => t.replace(/[^a-z]/g, ""));
-  const ctxSet = new Set(ctxTokens);
-  for (const tok of intentTokensExpanded) {
-    const clean = String(tok).replace(/[^a-z]/g, "");
-    if (clean && ctxSet.has(clean) && hayTokens.has(clean)) score += 1;
+    const talkBoost = ["talk","someone","listener","mentor","therapy","therapist","counseling","counselling","peer","group","support"];
+    for (const w of talkBoost) if (hayTokens.has(w)) score += 2;
   }
 
   // Crisis handling
   if (urgency === "high" && isCrisisResource(resource)) score += 30;
   if (urgency !== "high" && isCrisisResource(resource)) score -= 10;
 
-  // Gendered penalty unless user indicated
+  // Avoid gendered resources unless user stated gender
   if (!allowGendered && resourceIsGendered(resource)) score -= 12;
 
-  // Small quality tie-breaks
-  if ((resource.description || "").length > 30) score += 1;
+  // Small bonus for richer entries
+  if ((resource.description || "").length > 40) score += 1;
   if ((resource.best_for || "").length > 20) score += 1;
 
   return score;
 }
 
-function stripBadFormatting(s) {
-  let out = String(s || "").trim();
-  out = out.replace(/\*\*/g, "");
-  out = out.replace(/https?:\/\/\S+/gi, "");
-  out = out.replace(/\s{2,}/g, " ").trim();
-  return out;
+function stripMarkdownArtifacts(s) {
+  return String(s || "").replace(/\*\*/g, "").trim();
 }
 
 function safeString(x) {
@@ -311,19 +291,14 @@ async function openaiJSON(apiKey, messages, { timeoutMs = 25000 } = {}) {
     const content = j?.choices?.[0]?.message?.content;
     if (!content) throw new Error("openai_empty");
 
-    try {
-      return JSON.parse(content);
-    } catch {
-      throw new Error(`openai_bad_json:${content.slice(0, 220)}`);
-    }
+    return JSON.parse(content);
   } finally {
     clearTimeout(t);
   }
 }
 
-function buildParagraphFromCard(resource, fields) {
-  // No markdown. Your UI can’t render bold unless you switch to innerHTML.
-  // This is clean and readable with line breaks.
+function buildParagraph(resource, fields) {
+  // Plain text structure that frontend will render with bold labels (frontend converts labels).
   return [
     resource.title,
     resource.url,
@@ -360,19 +335,18 @@ export default async function handler(req, res) {
 
   const history = sanitizeHistory(req.body?.history);
   const messageNorm = normalize(message);
-  const historyUserText = recentUserText(history, 14);
-  const historyNorm = normalize(historyUserText);
 
-  // Safety gate
+  // Safety
   if (triggeredSafety(message)) {
     return send(res, 200, {
+      mode: "safety",
       intro: "If you’re not safe or you might hurt yourself, please reach out right now.",
       paragraphs: [
         [
           "Teen Line (Didi Hirsch)",
           "https://didihirsch.org/teenline/",
           "Description: Peer support for teens with supervised listeners. You can call, text, or email depending on availability.",
-          "Why it matches what you're looking for: This is the fastest option for talking to someone right now when things feel overwhelming or unsafe.",
+          "Why it matches what you're looking for: This is a direct way to talk to someone right now when things feel urgent.",
           "Next steps: Open the link and choose call or text. If it’s an emergency, contact local emergency services immediately.",
         ].join("\n"),
       ],
@@ -380,122 +354,151 @@ export default async function handler(req, res) {
     });
   }
 
+  // Greetings: do NOT presume resources
+  if (isGreeting(messageNorm)) {
+    return send(res, 200, {
+      mode: "greeting",
+      intro: "Hi. What are you looking for today, support, someone to talk to, confidence, school stress, grief, or something else?",
+      paragraphs: [],
+      resources: [],
+    });
+  }
+
   try {
     const resources = await loadResources(csvUrl);
     if (!resources.length) {
-      return send(res, 200, {
-        intro: "I couldn’t find any usable resources in the database right now.",
-        paragraphs: [],
-        resources: [],
-      });
+      return send(res, 200, { mode: "empty", intro: "The database is empty right now.", paragraphs: [], resources: [] });
     }
 
     const urgency = inferUrgency(messageNorm);
-
-    // Match against message + recent user intent so “hey” doesn’t dead-end.
-    const intentText = `${message}\n${historyUserText}`.trim();
-    const intentTokens = tokenize(intentText);
-    const expanded = expandIntentTokens(intentTokens);
+    const historyUser = history.filter((m) => m.role === "user").map((m) => m.content).join("\n");
+    const historyNorm = normalize(historyUser);
 
     const allowGendered = userIndicatedGender(messageNorm, historyNorm);
 
+    // Intent tokens from current message only, so we don’t “presume” based on earlier chatter.
+    const baseTokens = tokenize(message);
+    const expanded = expandIntentTokens(baseTokens);
+
     const ranked = resources
-      .map((r) => ({
-        r,
-        s: scoreResource(r, expanded, historyNorm, allowGendered, urgency),
-      }))
+      .map((r) => ({ r, s: scoreResource(r, expanded, allowGendered, urgency) }))
       .sort((a, b) => b.s - a.s);
 
-    // Pick top 1–3 real matches. If nothing scores, still return 3 general non-crisis items.
-    let top = ranked.filter((x) => x.s >= 8).slice(0, 3).map((x) => x.r);
+    const strong = ranked.filter((x) => x.s >= 10);
+    const medium = ranked.filter((x) => x.s >= 6);
 
-    if (!top.length) {
-      top = ranked
-        .filter((x) => !isCrisisResource(x.r))
-        .slice(0, 3)
-        .map((x) => x.r);
-      if (!top.length) top = ranked.slice(0, 3).map((x) => x.r);
+    // If we have strong matches, return them.
+    if (strong.length) {
+      const top = strong.slice(0, 3).map((x) => x.r);
+
+      const writeups = await openaiJSON(apiKey, [
+        {
+          role: "system",
+          content:
+            "You write short, specific explanations for resources from a provided database.\n" +
+            "Hard rules:\n" +
+            "- Use ONLY the provided resource fields.\n" +
+            "- Do NOT include any links or 'http' anywhere.\n" +
+            "- Do NOT ask questions.\n" +
+            "- No markdown.\n" +
+            "Length:\n" +
+            "- description: 2–3 sentences.\n" +
+            "- why: 2–3 sentences.\n" +
+            "- next_steps: 2–3 sentences.\n" +
+            'Output JSON only: {"intro": string, "cards":[{"id":string,"description":string,"why":string,"next_steps":string}]}\n' +
+            "Intro rules:\n" +
+            "- 1 sentence.\n" +
+            "- Must reflect the user's request.\n",
+        },
+        {
+          role: "user",
+          content: safeString({
+            user_request: message,
+            resources: top.map((r) => ({
+              id: r.id,
+              title: r.title,
+              description: r.description,
+              best_for: r.best_for,
+              when_to_use: r.when_to_use,
+              not_for: r.not_for,
+              fatherlessness_connection: r.fatherlessness_connection,
+            })),
+          }),
+        },
+      ]);
+
+      const intro = stripMarkdownArtifacts(String(writeups?.intro || "").trim()) ||
+        "Here are the best matches from the database.";
+
+      const cards = Array.isArray(writeups?.cards) ? writeups.cards : [];
+      const byId = new Map(cards.map((c) => [String(c?.id || ""), c]));
+
+      const paragraphs = top.map((r) => {
+        const c = byId.get(String(r.id)) || {};
+        return buildParagraph(r, {
+          description: stripMarkdownArtifacts(c.description || r.description || "This resource aligns with your request based on the database."),
+          why: stripMarkdownArtifacts(c.why || "It matches the keywords and intent of what you asked for."),
+          next_steps: stripMarkdownArtifacts(c.next_steps || "Open the link and follow the provider’s instructions to get started."),
+        });
+      });
+
+      return send(res, 200, {
+        mode: "recommendations",
+        intro,
+        paragraphs,
+        resources: top.map((r) => ({ title: r.title, url: r.url, why: "" })),
+      });
     }
 
-    // Generate slightly longer, specific fields for each selected resource.
-    // Model is NOT allowed to output URLs or markdown.
-    const writeups = await openaiJSON(apiKey, [
-      {
-        role: "system",
-        content:
-          "You write concise, specific blurbs for resources from a provided database.\n" +
-          "Hard rules:\n" +
-          "- Use ONLY the provided fields.\n" +
-          "- Do NOT add external resources.\n" +
-          "- Do NOT include any links or 'http' anywhere.\n" +
-          "- Do NOT ask questions.\n" +
-          "- No markdown (no **, no bullets).\n" +
-          "Length rules:\n" +
-          "- description: 2–3 sentences.\n" +
-          "- why: 2–3 sentences.\n" +
-          "- next_steps: 2–3 sentences.\n" +
-          'Output JSON only: {"intro": string, "cards":[{"id":string,"description":string,"why":string,"next_steps":string}]}\n' +
-          "Intro rules:\n" +
-          "- 1–2 sentences.\n" +
-          "- Must acknowledge what the user asked for.\n" +
-          "- Must NOT ask for location/age.\n",
-      },
-      {
-        role: "user",
-        content: safeString({
-          user_request: message,
-          inferred_intent_text: intentText,
-          resources: top.map((r) => ({
-            id: r.id,
-            title: r.title,
-            description: r.description,
-            best_for: r.best_for,
-            when_to_use: r.when_to_use,
-            not_for: r.not_for,
-            fatherlessness_connection: r.fatherlessness_connection,
-          })),
-        }),
-      },
-    ]);
+    // If we have medium matches and the user explicitly asked for resources, return them.
+    const explicitAsk = /\b(find|give|show|list|recommend)\b/i.test(message) || /\bresources?\b/i.test(message);
+    if (explicitAsk && medium.length) {
+      const top = medium.slice(0, 3).map((x) => x.r);
 
-    const intro =
-      String(writeups?.intro || "").trim() ||
-      "Here are the best matches from Youth Fatherless Network’s database.";
+      const intro =
+        "Here are the closest matches from the database based on what you said.";
 
-    const draftCards = Array.isArray(writeups?.cards) ? writeups.cards : [];
-    const byId = new Map(draftCards.map((c) => [String(c?.id || ""), c]));
+      const paragraphs = top.map((r) =>
+        buildParagraph(r, {
+          description: r.description ? stripMarkdownArtifacts(r.description) : "This is a database resource related to your request.",
+          why: r.best_for
+            ? stripMarkdownArtifacts(r.best_for)
+            : "It matches the theme of what you asked for based on the database fields.",
+          next_steps: r.when_to_use
+            ? stripMarkdownArtifacts(r.when_to_use)
+            : "Open the link, review what it offers, and choose the best fit.",
+        })
+      );
 
-    const paragraphs = top.map((r) => {
-      const d = byId.get(String(r.id)) || {};
-      const fields = {
-        description: stripBadFormatting(d.description || r.description || "This is a resource from the YFN database that aligns with your request."),
-        why: stripBadFormatting(d.why || "It matches the theme of what you asked for based on the database fields."),
-        next_steps: stripBadFormatting(d.next_steps || "Open the link, review what it offers, and choose the closest fit for you."),
-      };
-      return buildParagraphFromCard(r, fields);
-    });
+      return send(res, 200, {
+        mode: "recommendations",
+        intro,
+        paragraphs,
+        resources: top.map((r) => ({ title: r.title, url: r.url, why: "" })),
+      });
+    }
 
+    // No match: do NOT presume. Gentle reminder + ONE question.
     return send(res, 200, {
-      intro,
-      paragraphs,
-      resources: top.map((r) => ({ title: r.title, url: r.url, why: "" })),
+      mode: "clarify",
+      intro:
+        "I can only recommend items that are in Youth Fatherless Network’s database. What type of help are you looking for, community, someone to talk to, confidence, school stress, grief, or something else?",
+      paragraphs: [],
+      resources: [],
     });
   } catch (err) {
     const msg = String(err?.message || err);
-
     return send(res, 500, {
       error: "Server error",
       detail: msg.slice(0, 600),
       hint:
-        msg.includes("openai_call_failed")
-          ? "OpenAI call failed. Check OPENAI_API_KEY, billing, model access, and Vercel logs."
-          : msg.includes("sheet_fetch_failed")
-          ? "Sheet fetch failed. GOOGLE_SHEET_CSV_URL must be a published CSV export link (CSV export), not the edit link."
+        msg.includes("sheet_fetch_failed")
+          ? "Sheet fetch failed. GOOGLE_SHEET_CSV_URL must be a published CSV export link, not the edit link."
           : msg.includes("missing_column")
           ? "Your sheet headers do not match the required columns."
-          : msg.includes("openai_bad_json")
-          ? "Model returned malformed JSON. Try again or lower temperature further."
-          : "Check Vercel function logs for details.",
+          : msg.includes("openai_call_failed")
+          ? "OpenAI call failed. Check OPENAI_API_KEY, billing, model access, and logs."
+          : "Check function logs for details.",
     });
   }
 }
