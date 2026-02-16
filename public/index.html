@@ -7,15 +7,12 @@
   <style>
     :root{
       --bg:#071a33;
-      --panel:#0b2444;
-      --panel2:#0a213e;
       --text:#eaf0ff;
       --muted:rgba(234,240,255,.72);
       --border:rgba(234,240,255,.12);
       --shadow:rgba(0,0,0,.38);
       --accent:#ffffff;
       --danger:#ff5a5f;
-      --ok:rgba(255,255,255,.08);
     }
 
     *{ box-sizing:border-box; }
@@ -23,7 +20,7 @@
     body{
       margin:0;
       color:var(--text);
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
       overflow:hidden;
       background:
         radial-gradient(1200px 600px at 50% -80px, rgba(255,255,255,.10), rgba(255,255,255,0) 55%),
@@ -132,7 +129,7 @@
       opacity:.95;
     }
     .miniBtn:hover{ opacity:1; }
-    .miniBtn:active{ transform:scale(.99); }
+
     .miniBtnDanger{
       background:rgba(255,90,95,.10);
       border-color:rgba(255,90,95,.28);
@@ -218,7 +215,6 @@
       border-radius:12px;
     }
     .openLink:hover{ opacity:1; }
-    .openLink:active{ transform:scale(.99); }
 
     .cardLine{
       margin:8px 0 0;
@@ -232,27 +228,6 @@
       font-weight:780;
     }
 
-    .pillRow{
-      display:flex;
-      flex-wrap:wrap;
-      gap:8px;
-      margin-top:10px;
-    }
-
-    .pill{
-      font-size:12.5px;
-      font-weight:700;
-      padding:6px 10px;
-      border-radius:999px;
-      border:1px solid rgba(234,240,255,.12);
-      background:rgba(255,255,255,.04);
-      color:rgba(234,240,255,.9);
-      cursor:pointer;
-      user-select:none;
-    }
-    .pill:hover{ background:rgba(255,255,255,.06); }
-
-    /* Typing indicator */
     .typing{
       display:inline-flex;
       align-items:center;
@@ -283,7 +258,6 @@
       40% { transform: translateY(-4px); opacity:1; }
     }
 
-    /* Input area */
     .composer{
       padding:12px 12px 14px;
       border-top:1px solid rgba(234,240,255,.10);
@@ -340,12 +314,6 @@
       background:var(--accent);
       color:#0b1630;
       border-color:rgba(255,255,255,.22);
-    }
-
-    .btnCrisis{
-      background:rgba(255,90,95,.14);
-      border-color:rgba(255,90,95,.35);
-      color:var(--danger);
     }
 
     .hint{
@@ -409,14 +377,6 @@
 
       <div class="composer">
         <div class="composerInner">
-          <button id="btnCrisis" class="btn btnCrisis" title="Get help now" aria-label="Get help now" type="button">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M12 9v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              <path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              <path d="M10.3 4.9 2.6 19.2c-.6 1.1.2 2.4 1.5 2.4h15.8c1.3 0 2.1-1.3 1.5-2.4L13.7 4.9c-.7-1.2-2.7-1.2-3.4 0Z" stroke="currentColor" stroke-width="2"/>
-            </svg>
-          </button>
-
           <textarea id="input" class="input" placeholder="What do you need help with?" rows="1"></textarea>
 
           <button id="btnSend" class="btn btnSend" title="Send" aria-label="Send" type="button">
@@ -441,7 +401,6 @@
     const messagesEl = document.getElementById("messages");
     const inputEl = document.getElementById("input");
     const btnSend = document.getElementById("btnSend");
-    const btnCrisis = document.getElementById("btnCrisis");
     const btnCrisisTop = document.getElementById("btnCrisisTop");
     const btnReset = document.getElementById("btnReset");
     const toastEl = document.getElementById("toast");
@@ -518,15 +477,15 @@
 
           const desc = document.createElement("p");
           desc.className = "cardLine";
-          desc.innerHTML = "<span class='label'>Description:</span> " + (escapeHtml(c.description || ""));
+          desc.innerHTML = "<span class='label'>Description:</span> " + escapeHtml(c.description || "");
 
           const why = document.createElement("p");
           why.className = "cardLine";
-          why.innerHTML = "<span class='label'>Why it matches:</span> " + (escapeHtml(c.why || ""));
+          why.innerHTML = "<span class='label'>Why it matches:</span> " + escapeHtml(c.why || "");
 
           const next = document.createElement("p");
           next.className = "cardLine";
-          next.innerHTML = "<span class='label'>Next steps:</span> " + (escapeHtml(c.next_steps || ""));
+          next.innerHTML = "<span class='label'>Next steps:</span> " + escapeHtml(c.next_steps || "");
 
           card.appendChild(top);
           card.appendChild(desc);
@@ -556,7 +515,6 @@
     function setSending(state){
       isSending = state;
       btnSend.disabled = state;
-      btnCrisis.disabled = state;
       btnCrisisTop.disabled = state;
       btnReset.disabled = state;
     }
@@ -568,7 +526,9 @@
 
       const bubble = document.createElement("div");
       bubble.className = "typing";
-      bubble.innerHTML = "<div class='dots' aria-hidden='true'><span></span><span></span><span></span></div><div style='font-size:13.5px;color:rgba(234,240,255,.85);font-weight:650;'>Searching the database…</div>";
+      bubble.innerHTML =
+        "<div class='dots' aria-hidden='true'><span></span><span></span><span></span></div>" +
+        "<div style='font-size:13.5px;color:rgba(234,240,255,.85);font-weight:650;'>Searching the database…</div>";
 
       row.appendChild(bubble);
       messagesEl.appendChild(row);
@@ -643,7 +603,6 @@
     }
 
     btnSend.addEventListener("click", sendMessage);
-    btnCrisis.addEventListener("click", openCrisis);
     btnCrisisTop.addEventListener("click", openCrisis);
     btnReset.addEventListener("click", resetChat);
 
@@ -666,10 +625,8 @@
       addBubble("assistant", "Tell me what you want help with, and I’ll pull the closest matches from the database.");
     }
 
-    // Network hint (optional)
     function updateNetHint(){
-      const online = navigator.onLine;
-      netHint.textContent = online ? "" : "Offline";
+      netHint.textContent = navigator.onLine ? "" : "Offline";
     }
     window.addEventListener("online", updateNetHint);
     window.addEventListener("offline", updateNetHint);
