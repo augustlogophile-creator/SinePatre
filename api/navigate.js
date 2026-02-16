@@ -1,22 +1,20 @@
 // api/navigate.js - YFN Resource Navigator (Vercel serverless)
 //
-// Key rules now enforced:
-// - Uses ONLY resources from the Google Sheet CSV (never external links).
-// - Always tries to interpret the user's request as a request for resources.
-// - Picks ONLY the best 1–3 matches (or none if no match).
-// - Avoids gender-specific resources unless the user indicates it.
-// - Returns structured fields, and the frontend renders real <strong> bold (no **markdown**).
+// Guarantees:
+// - ALWAYS returns 1–3 specific resources from the Google Sheet (even for "hey").
+// - NEVER asks follow-up questions.
+// - NEVER invents external links. URLs come ONLY from the sheet.
+// - Response format matches your current frontend: { intro, paragraphs, resources }
 //
 // Env vars required:
 // - OPENAI_API_KEY
-// - GOOGLE_SHEET_CSV_URL  (published CSV export link)
+// - GOOGLE_SHEET_CSV_URL (published CSV export link)
 
-const MAX_MESSAGE_LENGTH = 1500;
-const MAX_HISTORY_ITEMS = 24;
+const MAX_MESSAGE_LENGTH = 2000;
+const MAX_HISTORY_ITEMS = 40;
 
-// Keep a strong general model name that is likely to exist in most accounts.
-// If your project has access to a newer model, you can swap it here.
-const OPENAI_MODEL = "gpt-4o";
+const OPENAI_MODEL = "gpt-4.1";
+const TEMPERATURE = 0.15;
 
 const SAFETY_REGEX = [
   /\b(suicide|kill myself|end my life|end it all)\b/i,
@@ -26,11 +24,12 @@ const SAFETY_REGEX = [
   /\b(overdose|poison|hang)\b/i,
 ];
 
-const RESOURCE_INTENT_HINTS = [
-  "resources","resource","recommend","recommendation","options","program","programs",
-  "support group","therapy","therapist","counseling","mentor","mentorship","hotline","helpline",
-  "where can i get help","where do i go","who can i talk to","find me","show me","give me","list",
-];
+async function ensureFetch() {
+  if (typeof globalThis.fetch === "function") return;
+  const undici = await import("undici");
+  globalThis.fetch = undici.fetch;
+}
+void ensureFetch();
 
 function setCors(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -59,75 +58,17 @@ function sanitizeHistory(history) {
   if (!Array.isArray(history)) return [];
   return history
     .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
-    .map((m) => ({ role: m.role, content: String(m.content).slice(0, 1200) }))
+    .map((m) => ({ role: m.role, content: String(m.content).slice(0, 1400) }))
     .slice(-MAX_HISTORY_ITEMS);
 }
 
-function recentContextText(history, maxTurns = 8) {
+function recentUserText(history, maxTurns = 14) {
   const slice = Array.isArray(history) ? history.slice(-maxTurns) : [];
-  return slice.map((m) => `${m.role}: ${m.content}`).join("\n").slice(0, 3600);
-}
-
-function safeString(x) {
-  if (typeof x === "string") return x;
-  if (x == null) return "";
-  try { return JSON.stringify(x); } catch { return String(x); }
-}
-
-function userSignalsGirl(message, context) {
-  const t = ` ${normalize(message)} ${normalize(context)} `;
-  return (
-    t.includes(" i am a girl ") ||
-    t.includes(" i'm a girl ") ||
-    t.includes(" im a girl ") ||
-    t.includes(" as a girl ") ||
-    t.includes(" teen girl ") ||
-    t.includes(" female ") ||
-    t.includes(" she/her ") ||
-    t.includes(" my daughter ")
-  );
-}
-
-function isGenderSpecificResource(resource) {
-  const t = `${resource.title} ${resource.description} ${resource.best_for}`.toLowerCase();
-  return (
-    /\bgirls\b/.test(t) ||
-    /\bgirl\b/.test(t) ||
-    /\bwomen\b/.test(t) ||
-    /\bfemale\b/.test(t)
-  );
-}
-
-function interpretAsResourceSearch(message) {
-  const t = normalize(message);
-
-  // Treat common “how do I / how to / fix / learn” as resource intent
-  const howTo =
-    t.startsWith("how do i ") ||
-    t.startsWith("how to ") ||
-    t.includes(" how do i ") ||
-    t.includes(" how to ");
-
-  const fixLearn =
-    t.includes(" fix ") || t.includes(" repair ") || t.includes(" learn ") || t.includes(" tutorial ") || t.includes(" guide ");
-
-  const explicit = RESOURCE_INTENT_HINTS.some((kw) => String(message || "").toLowerCase().includes(kw));
-
-  return explicit || (howTo && fixLearn) || howTo;
-}
-
-function tokenize(text) {
-  const stop = new Set([
-    "the","and","or","but","if","to","of","in","on","for","with","is","are","was","were",
-    "be","been","being","i","me","my","you","your","we","they","this","that","it","a","an",
-    "about","from","by","at","as","im","i'm","dont","don't","cant","can't","so","just","like",
-    "really","can","could","would","please","help","need","want","get","give","show","tell","also",
-    "how","do","does","did","what","why","when","where","who"
-  ]);
-
-  return normalize(text)
-    .split(" ")
-    .filter((w) => w.length > 2 && !stop.has(w));
+  return slice
+    .filter((m) => m.role === "user")
+    .map((m) => m.content)
+    .join("\n")
+    .slice(0, 4500);
 }
 
 // Minimal CSV parser (handles quotes)
@@ -183,31 +124,88 @@ async function loadResources(csvUrl) {
     throw new Error(`sheet_fetch_failed:${r.status}:${t.slice(0, 180)}`);
   }
   const text = await r.text();
+
   const rows = parseCSV(text);
   if (!rows.length) throw new Error("sheet_empty");
 
   const headers = rows[0].map((h) => normalize(h).replace(/\s+/g, "_"));
   const col = (name) => headers.indexOf(name);
 
-  const required = ["id","title","description","best_for","when_to_use","not_for","fatherlessness_connection","url"];
+  const required = ["id", "title", "description", "best_for", "when_to_use", "not_for", "fatherlessness_connection", "url"];
   for (const c of required) {
     if (col(c) === -1) throw new Error(`missing_column:${c}`);
   }
 
-  const items = rows.slice(1).map((r2) => ({
-    id: (r2[col("id")] || "").trim(),
-    title: (r2[col("title")] || "").trim(),
-    description: (r2[col("description")] || "").trim(),
-    best_for: (r2[col("best_for")] || "").trim(),
-    when_to_use: (r2[col("when_to_use")] || "").trim(),
-    not_for: (r2[col("not_for")] || "").trim(),
-    fatherlessness_connection: (r2[col("fatherlessness_connection")] || "").trim(),
-    url: (r2[col("url")] || "").trim(),
-  }))
-  .filter((x) => x.id && x.title && x.url);
+  const items = rows
+    .slice(1)
+    .map((r2) => ({
+      id: (r2[col("id")] || "").trim(),
+      title: (r2[col("title")] || "").trim(),
+      description: (r2[col("description")] || "").trim(),
+      best_for: (r2[col("best_for")] || "").trim(),
+      when_to_use: (r2[col("when_to_use")] || "").trim(),
+      not_for: (r2[col("not_for")] || "").trim(),
+      fatherlessness_connection: (r2[col("fatherlessness_connection")] || "").trim(),
+      url: (r2[col("url")] || "").trim(),
+    }))
+    .filter((x) => x.id && x.title && x.url);
 
   CACHE = { at: now, ttlMs: CACHE.ttlMs, items };
   return items;
+}
+
+function tokenize(text) {
+  const stop = new Set([
+    "the","and","or","but","if","to","of","in","on","for","with","is","are","was","were","be",
+    "been","being","i","me","my","you","your","we","they","this","that","it","a","an","about",
+    "from","by","at","as","im","i'm","dont","don't","cant","can't","so","just","like","really",
+    "can","could","would","please","help","need","want","get","give","show","tell","also","now",
+    "yes","yeah","ok","okay","do","it","thanks","thank","find","me","some","stuff","thing","things",
+    "stop","no","nah"
+  ]);
+
+  return normalize(text)
+    .split(" ")
+    .filter((w) => w.length > 2 && !stop.has(w));
+}
+
+function expandIntentTokens(tokens) {
+  // Practical: “talk to someone” should map to support resources, not a question loop.
+  const map = new Map([
+    ["talk", ["talk","someone","support","listener","peer","mentor","counselor","counselling","counseling","therapy","therapist"]],
+    ["support", ["support","community","peer","group","groups","help","guidance","connect","connection"]],
+    ["community", ["community","peer","group","groups","belonging","local","inperson","in-person"]],
+    ["confidence", ["confidence","selfesteem","self-esteem","assertiveness","motivation","courage"]],
+    ["anxiety", ["anxiety","panic","worry","nervous","stress"]],
+    ["stress", ["stress","overwhelmed","pressure","burnout"]],
+    ["grief", ["grief","loss","mourning"]],
+    ["friends", ["friends","friendship","social","lonely","loneliness"]],
+    ["relationships", ["relationships","dating","breakup","family","parents"]],
+    ["school", ["school","homework","grades","class","teacher","bullying"]],
+    ["mentor", ["mentor","mentorship","coach","rolemodel","role-model"]],
+    ["therapy", ["therapy","therapist","counseling","counselling","mentalhealth","mental-health"]],
+    ["fix", ["fix","repair","howto","how-to","tutorial","guide","skills","life","life-skills"]],
+  ]);
+
+  const out = new Set(tokens.map((t) => t.replace(/[^a-z]/g, "")));
+  for (const t of tokens) {
+    const key = t.replace(/[^a-z]/g, "");
+    if (!key) continue;
+
+    for (const [k, syns] of map.entries()) {
+      if (key === k || syns.includes(key)) {
+        out.add(k);
+        for (const s of syns) out.add(String(s).replace(/[^a-z]/g, ""));
+      }
+    }
+  }
+  return [...out].filter(Boolean);
+}
+
+function inferUrgency(messageNorm) {
+  if (/\b(i want to die|kill myself|end my life|self harm|cut myself)\b/i.test(messageNorm)) return "high";
+  if (/\bpanic|can t breathe|freaking out|urgent\b/i.test(messageNorm)) return "medium";
+  return "low";
 }
 
 function isCrisisResource(resource) {
@@ -215,23 +213,75 @@ function isCrisisResource(resource) {
   return t.includes("crisis") || t.includes("suicide") || t.includes("self-harm") || t.includes("hotline") || t.includes("988");
 }
 
-function scoreResource(resource, queryTokens, contextTokens, tagTokens, urgency, allowGenderSpecific) {
-  const hay = tokenize(`${resource.title} ${resource.description} ${resource.best_for} ${resource.fatherlessness_connection} ${resource.when_to_use} ${resource.not_for}`);
+function resourceIsGendered(resource) {
+  const t = `${resource.title} ${resource.description} ${resource.best_for}`.toLowerCase();
+  return t.includes("girls") || t.includes("girl ") || t.includes("women") || t.includes("female") ||
+         t.includes("boys") || t.includes("men") || t.includes("male");
+}
+
+function userIndicatedGender(messageNorm, historyNorm) {
+  const t = `${messageNorm}\n${historyNorm}`.toLowerCase();
+  return t.includes("i am a girl") || t.includes("i'm a girl") || t.includes("im a girl") || t.includes("female") ||
+         t.includes("i am a boy") || t.includes("i'm a boy") || t.includes("im a boy") || t.includes("male");
+}
+
+function scoreResource(resource, intentTokensExpanded, historyNorm, allowGendered, urgency) {
+  const hayText = normalize(
+    `${resource.title} ${resource.description} ${resource.best_for} ${resource.when_to_use} ${resource.not_for} ${resource.fatherlessness_connection}`
+  );
+  const hayTokens = new Set(tokenize(hayText).map((t) => t.replace(/[^a-z]/g, "")));
+
   let score = 0;
 
-  for (const w of hay) {
-    if (queryTokens.includes(w)) score += 5;
-    if (tagTokens.includes(w)) score += 6;
-    if (contextTokens.includes(w)) score += 2;
+  for (const tok of intentTokensExpanded) {
+    const clean = String(tok).replace(/[^a-z]/g, "");
+    if (clean && hayTokens.has(clean)) score += 4;
   }
 
-  const fatherText = (resource.fatherlessness_connection || "").toLowerCase();
-  if (fatherText.includes("father") || fatherText.includes("dad") || fatherText.includes("fatherless")) score += 3;
+  // If they want to "talk to someone", heavily prefer support/peer/mentor/therapy style entries
+  const wantsTalk = intentTokensExpanded.includes("talk") || intentTokensExpanded.includes("support");
+  if (wantsTalk) {
+    const talkWords = ["talk","support","peer","mentor","therapy","therapist","counseling","counselling","group","listener"];
+    for (const w of talkWords) {
+      const c = w.replace(/[^a-z]/g, "");
+      if (hayTokens.has(c)) score += 3;
+    }
+  }
 
-  if (urgency === "high" && isCrisisResource(resource)) score += 10;
-  if (!allowGenderSpecific && isGenderSpecificResource(resource)) score -= 8;
+  // Light context assist
+  const ctxTokens = tokenize(historyNorm).map((t) => t.replace(/[^a-z]/g, ""));
+  const ctxSet = new Set(ctxTokens);
+  for (const tok of intentTokensExpanded) {
+    const clean = String(tok).replace(/[^a-z]/g, "");
+    if (clean && ctxSet.has(clean) && hayTokens.has(clean)) score += 1;
+  }
+
+  // Crisis handling
+  if (urgency === "high" && isCrisisResource(resource)) score += 30;
+  if (urgency !== "high" && isCrisisResource(resource)) score -= 10;
+
+  // Gendered penalty unless user indicated
+  if (!allowGendered && resourceIsGendered(resource)) score -= 12;
+
+  // Small quality tie-breaks
+  if ((resource.description || "").length > 30) score += 1;
+  if ((resource.best_for || "").length > 20) score += 1;
 
   return score;
+}
+
+function stripBadFormatting(s) {
+  let out = String(s || "").trim();
+  out = out.replace(/\*\*/g, "");
+  out = out.replace(/https?:\/\/\S+/gi, "");
+  out = out.replace(/\s{2,}/g, " ").trim();
+  return out;
+}
+
+function safeString(x) {
+  if (typeof x === "string") return x;
+  if (x == null) return "";
+  try { return JSON.stringify(x); } catch { return String(x); }
 }
 
 async function openaiJSON(apiKey, messages, { timeoutMs = 25000 } = {}) {
@@ -248,7 +298,7 @@ async function openaiJSON(apiKey, messages, { timeoutMs = 25000 } = {}) {
       },
       body: JSON.stringify({
         model: OPENAI_MODEL,
-        temperature: 0.25,
+        temperature: TEMPERATURE,
         response_format: { type: "json_object" },
         messages,
       }),
@@ -260,10 +310,27 @@ async function openaiJSON(apiKey, messages, { timeoutMs = 25000 } = {}) {
     const j = JSON.parse(raw);
     const content = j?.choices?.[0]?.message?.content;
     if (!content) throw new Error("openai_empty");
-    return JSON.parse(content);
+
+    try {
+      return JSON.parse(content);
+    } catch {
+      throw new Error(`openai_bad_json:${content.slice(0, 220)}`);
+    }
   } finally {
     clearTimeout(t);
   }
+}
+
+function buildParagraphFromCard(resource, fields) {
+  // No markdown. Your UI can’t render bold unless you switch to innerHTML.
+  // This is clean and readable with line breaks.
+  return [
+    resource.title,
+    resource.url,
+    `Description: ${fields.description}`,
+    `Why it matches what you're looking for: ${fields.why}`,
+    `Next steps: ${fields.next_steps}`,
+  ].join("\n");
 }
 
 export default async function handler(req, res) {
@@ -273,7 +340,6 @@ export default async function handler(req, res) {
     res.status(204).end();
     return;
   }
-
   if (req.method !== "POST") {
     return send(res, 405, { error: "POST only" });
   }
@@ -293,194 +359,142 @@ export default async function handler(req, res) {
   if (message.length > MAX_MESSAGE_LENGTH) return send(res, 400, { error: "Message too long" });
 
   const history = sanitizeHistory(req.body?.history);
-  const contextText = recentContextText(history, 10);
+  const messageNorm = normalize(message);
+  const historyUserText = recentUserText(history, 14);
+  const historyNorm = normalize(historyUserText);
 
-  // Safety gate (still allowed to show safety resources)
+  // Safety gate
   if (triggeredSafety(message)) {
     return send(res, 200, {
-      mode: "safety",
-      intro: "If you’re in danger or might hurt yourself, please contact support right now.",
-      items: [
-        {
-          title: "988 Suicide & Crisis Lifeline",
-          url: "https://988lifeline.org",
-          description: "24/7 free support in the U.S. by call or text.",
-          why: "This is the fastest way to reach immediate, trained help.",
-          next_steps: "Call or text 988 now. If you’re in immediate danger, call emergency services."
-        },
-        {
-          title: "Teen Line (Didi Hirsch)",
-          url: "https://didihirsch.org/teenline/",
-          description: "Teen-to-teen support with trained listeners and supervision.",
-          why: "If you want to talk to someone who understands being a teen, this is a strong option.",
-          next_steps: "Open the site and choose the best way to reach them (text, call, or email)."
-        }
+      intro: "If you’re not safe or you might hurt yourself, please reach out right now.",
+      paragraphs: [
+        [
+          "Teen Line (Didi Hirsch)",
+          "https://didihirsch.org/teenline/",
+          "Description: Peer support for teens with supervised listeners. You can call, text, or email depending on availability.",
+          "Why it matches what you're looking for: This is the fastest option for talking to someone right now when things feel overwhelming or unsafe.",
+          "Next steps: Open the link and choose call or text. If it’s an emergency, contact local emergency services immediately.",
+        ].join("\n"),
       ],
-      resources: []
+      resources: [{ title: "Teen Line (Didi Hirsch)", url: "https://didihirsch.org/teenline/", why: "" }],
     });
   }
 
   try {
     const resources = await loadResources(csvUrl);
-
-    const allowGenderSpecific = userSignalsGirl(message, contextText);
-
-    // If user is not clearly asking for recommendations, keep it focused and steer to resource matching.
-    const resourceIntent = interpretAsResourceSearch(message);
-
-    if (!resourceIntent) {
-      const convo = await openaiJSON(apiKey, [
-        {
-          role: "system",
-          content:
-            "You are the Youth Fatherless Network Resource Navigator.\n" +
-            "You do NOT give long advice or unrelated explanations.\n" +
-            "Your job is to quickly clarify what resources the person wants from the database.\n" +
-            "Output JSON only: { \"intro\": string }\n" +
-            "Rules:\n" +
-            "- 2 to 4 sentences.\n" +
-            "- Ask ONE focused follow-up question that helps you pick resources.\n" +
-            "- Examples of good clarifiers: location, age range, topic area, what outcome they want.\n" +
-            "- Do not mention the spreadsheet. Do not mention models.\n"
-        },
-        ...history,
-        { role: "user", content: message }
-      ]);
-
+    if (!resources.length) {
       return send(res, 200, {
-        mode: "clarify",
-        intro: String(convo?.intro || "Tell me what kind of support you want, and what you want it to help with.").trim(),
-        items: [],
-        resources: []
+        intro: "I couldn’t find any usable resources in the database right now.",
+        paragraphs: [],
+        resources: [],
       });
     }
 
-    // Classification for tags/urgency (no recommendations yet)
-    const classification = await openaiJSON(apiKey, [
-      {
-        role: "system",
-        content:
-          "You classify what the user is looking for so we can pick the best matches from a fixed resource database.\n" +
-          "Output JSON only:\n" +
-          '{ "need_tags": string[], "urgency": "low|medium|high", "focus_summary": string }\n' +
-          "Rules:\n" +
-          "- focus_summary: 8 to 16 words describing the user's real goal.\n" +
-          "- need_tags should be short, like: confidence, grief, anxiety, school, relationships, mentoring, life-skills, identity, loneliness, discipline, motivation.\n" +
-          "- If the user asked \"how do I fix/learn\" something, treat it as a request for learning/help resources.\n" +
-          "- Do not recommend resources here.\n"
-      },
-      ...history,
-      { role: "user", content: safeString({ current_request: message, prior_context: contextText }) }
-    ]);
+    const urgency = inferUrgency(messageNorm);
 
-    const urgency = String(classification?.urgency || "low").toLowerCase();
-    const queryTokens = tokenize(message);
-    const contextTokens = tokenize(contextText);
-    const tagTokens = tokenize((classification?.need_tags || []).join(" "));
+    // Match against message + recent user intent so “hey” doesn’t dead-end.
+    const intentText = `${message}\n${historyUserText}`.trim();
+    const intentTokens = tokenize(intentText);
+    const expanded = expandIntentTokens(intentTokens);
 
-    // Rank resources
-    const rankedAll = resources
+    const allowGendered = userIndicatedGender(messageNorm, historyNorm);
+
+    const ranked = resources
       .map((r) => ({
         r,
-        s: scoreResource(r, queryTokens, contextTokens, tagTokens, urgency, allowGenderSpecific),
+        s: scoreResource(r, expanded, historyNorm, allowGendered, urgency),
       }))
       .sort((a, b) => b.s - a.s);
 
-    // Filter out crisis unless high urgency
-    let ranked = rankedAll;
-    if (urgency !== "high") {
-      ranked = rankedAll.filter((x) => !isCrisisResource(x.r));
-      if (!ranked.length) ranked = rankedAll;
+    // Pick top 1–3 real matches. If nothing scores, still return 3 general non-crisis items.
+    let top = ranked.filter((x) => x.s >= 8).slice(0, 3).map((x) => x.r);
+
+    if (!top.length) {
+      top = ranked
+        .filter((x) => !isCrisisResource(x.r))
+        .slice(0, 3)
+        .map((x) => x.r);
+      if (!top.length) top = ranked.slice(0, 3).map((x) => x.r);
     }
 
-    // Only take matches that actually scored above a threshold
-    const threshold = 6;
-    const best = ranked.filter((x) => x.s >= threshold).slice(0, 3).map((x) => x.r);
-
-    if (!best.length) {
-      return send(res, 200, {
-        mode: "no_match",
-        intro:
-          "I don’t see a strong match for that in the YFN resource database yet. " +
-          "If you tell me what kind of support you want (mentoring, confidence, grief, anxiety, school, relationships) and what outcome you want, I can try again.",
-        items: [],
-        resources: []
-      });
-    }
-
-    // Ask the model to write ONLY the 3 fields for each fixed resource, no links, no new titles.
-    const writeup = await openaiJSON(apiKey, [
+    // Generate slightly longer, specific fields for each selected resource.
+    // Model is NOT allowed to output URLs or markdown.
+    const writeups = await openaiJSON(apiKey, [
       {
         role: "system",
         content:
-          "You are the Youth Fatherless Network Resource Navigator.\n" +
-          "CRITICAL: You MUST use ONLY the provided resources. Do not mention or invent any other websites, programs, or links.\n" +
-          "You will be given 1–3 resources. For each one, write:\n" +
-          "- description (2–3 sentences)\n" +
-          "- why (2–3 sentences)\n" +
-          "- next_steps (1–3 sentences)\n" +
+          "You write concise, specific blurbs for resources from a provided database.\n" +
           "Hard rules:\n" +
-          "- No markdown asterisks. No **bold** markers. Plain text only.\n" +
-          "- No filler. No generic lectures. No advice unrelated to selecting/using the resource.\n" +
-          "- If the user asked how to fix/learn something, frame the resources as places to learn or get support, not as a direct how-to tutorial.\n" +
-          "Output JSON only:\n" +
-          '{ "intro": string, "items": [ { "id": string, "description": string, "why": string, "next_steps": string } ] }\n' +
+          "- Use ONLY the provided fields.\n" +
+          "- Do NOT add external resources.\n" +
+          "- Do NOT include any links or 'http' anywhere.\n" +
+          "- Do NOT ask questions.\n" +
+          "- No markdown (no **, no bullets).\n" +
+          "Length rules:\n" +
+          "- description: 2–3 sentences.\n" +
+          "- why: 2–3 sentences.\n" +
+          "- next_steps: 2–3 sentences.\n" +
+          'Output JSON only: {"intro": string, "cards":[{"id":string,"description":string,"why":string,"next_steps":string}]}\n' +
           "Intro rules:\n" +
           "- 1–2 sentences.\n" +
-          "- Refer to what they asked for.\n"
+          "- Must acknowledge what the user asked for.\n" +
+          "- Must NOT ask for location/age.\n",
       },
-      { role: "user", content: safeString({
-        focus_summary: classification?.focus_summary || "",
-        user_request: message,
-        prior_context: contextText,
-        resources: best.map((r) => ({
-          id: r.id,
-          title: r.title,
-          url: r.url,
-          description: r.description,
-          best_for: r.best_for,
-          when_to_use: r.when_to_use,
-          not_for: r.not_for,
-          fatherlessness_connection: r.fatherlessness_connection
-        }))
-      }) }
+      {
+        role: "user",
+        content: safeString({
+          user_request: message,
+          inferred_intent_text: intentText,
+          resources: top.map((r) => ({
+            id: r.id,
+            title: r.title,
+            description: r.description,
+            best_for: r.best_for,
+            when_to_use: r.when_to_use,
+            not_for: r.not_for,
+            fatherlessness_connection: r.fatherlessness_connection,
+          })),
+        }),
+      },
     ]);
 
-    const byId = new Map(best.map((r) => [r.id, r]));
-    const modelItems = Array.isArray(writeup?.items) ? writeup.items : [];
+    const intro =
+      String(writeups?.intro || "").trim() ||
+      "Here are the best matches from Youth Fatherless Network’s database.";
 
-    // Build final items strictly from the sheet resources we selected
-    const finalItems = best.map((r) => {
-      const m = modelItems.find((x) => String(x?.id || "").trim() === r.id) || {};
-      return {
-        title: r.title,
-        url: r.url,
-        description: String(m.description || "").trim().slice(0, 600),
-        why: String(m.why || "").trim().slice(0, 600),
-        next_steps: String(m.next_steps || "").trim().slice(0, 420),
+    const draftCards = Array.isArray(writeups?.cards) ? writeups.cards : [];
+    const byId = new Map(draftCards.map((c) => [String(c?.id || ""), c]));
+
+    const paragraphs = top.map((r) => {
+      const d = byId.get(String(r.id)) || {};
+      const fields = {
+        description: stripBadFormatting(d.description || r.description || "This is a resource from the YFN database that aligns with your request."),
+        why: stripBadFormatting(d.why || "It matches the theme of what you asked for based on the database fields."),
+        next_steps: stripBadFormatting(d.next_steps || "Open the link, review what it offers, and choose the closest fit for you."),
       };
+      return buildParagraphFromCard(r, fields);
     });
 
     return send(res, 200, {
-      mode: "recommendations_structured",
-      intro: String(writeup?.intro || "Here are the best matches from the YFN resource database.").trim(),
-      items: finalItems,
-      resources: best.map((r) => ({ title: r.title, url: r.url, why: "" }))
+      intro,
+      paragraphs,
+      resources: top.map((r) => ({ title: r.title, url: r.url, why: "" })),
     });
-
   } catch (err) {
     const msg = String(err?.message || err);
 
     return send(res, 500, {
       error: "Server error",
-      detail: msg.slice(0, 700),
+      detail: msg.slice(0, 600),
       hint:
         msg.includes("openai_call_failed")
           ? "OpenAI call failed. Check OPENAI_API_KEY, billing, model access, and Vercel logs."
           : msg.includes("sheet_fetch_failed")
-          ? "Sheet fetch failed. GOOGLE_SHEET_CSV_URL must be a published CSV export link, not the edit link."
+          ? "Sheet fetch failed. GOOGLE_SHEET_CSV_URL must be a published CSV export link (CSV export), not the edit link."
           : msg.includes("missing_column")
           ? "Your sheet headers do not match the required columns."
+          : msg.includes("openai_bad_json")
+          ? "Model returned malformed JSON. Try again or lower temperature further."
           : "Check Vercel function logs for details.",
     });
   }
