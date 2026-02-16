@@ -2,20 +2,18 @@
 //
 // Hard requirements:
 // - Use ONLY resources from the Google Sheet (published CSV).
-// - Always attempt to return specific matching resources when the user asks, or when intent is clear.
+// - Never show unrelated resources.
 // - Ask VERY few questions, only when we truly cannot match anything.
-// - Do not list example categories like "school stress, anxiety...".
+// - Do not list example categories.
 // - Do not recommend girls-only resources unless user indicates girl/female/she/her.
-// - Output must be clean and UI-friendly (no markdown **). We return structured cards.
-// - If the user message is out of scope (ex: "fix a tire"), do a short redirect and ask what support they want.
+// - Output must be clean and UI-friendly (no markdown). We return structured cards.
+// - If the user message is out of scope (ex: "tie a tie"), respond conversationally,
+//   infer the likely intent, then ask ONE bridging question. Do NOT show random cards.
 
 const MAX_MESSAGE_LENGTH = 1500;
 const MAX_HISTORY_ITEMS = 30;
 const MAX_CONTEXT_CHARS = 6000;
 
-// Model selection:
-// Use a strong general model if available. If your Vercel logs show a model error,
-// set OPENAI_MODEL to a model you have access to.
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1";
 const OPENAI_CLASSIFIER_MODEL = process.env.OPENAI_CLASSIFIER_MODEL || OPENAI_MODEL;
 
@@ -27,12 +25,10 @@ const SAFETY_REGEX = [
   /\b(overdose|poison|hang)\b/i,
 ];
 
-// These are only used as a weak backstop.
-// The real intent decision is now handled by the classifier.
 const OUT_OF_SCOPE_HINTS = [
-  "fix a tire","change a tire","tie a tie","homework answers","math problem",
-  "physics problem","chemistry","solve this equation","car repair","engine",
-  "plumbing","electrician","wiring","oil change","brake pads",
+  "fix a tire","change a tire","tie a tie","how do i tie a tie","homework answers","math problem",
+  "physics problem","chemistry","solve this equation","car repair","engine","plumbing","electrician",
+  "wiring","oil change","brake pads","cook this recipe","install this"
 ];
 
 async function ensureFetch() {
@@ -81,10 +77,8 @@ function recentContextText(history, maxTurns = 10) {
 
 function isGreeting(message) {
   const t = normalize(message);
-  return (
-    t === "hi" || t === "hey" || t === "hello" || t === "yo" || t === "sup" ||
-    t === "hey!" || t === "hi!" || t === "hello!"
-  );
+  return t === "hi" || t === "hey" || t === "hello" || t === "yo" || t === "sup" ||
+         t === "hey!" || t === "hi!" || t === "hello!";
 }
 
 function looksOutOfScope(message) {
@@ -120,20 +114,13 @@ function tokenize(text) {
     .filter((w) => w.length > 2 && !stop.has(w));
 }
 
-// Strip common garbage that sometimes appears in pasted or model-injected text.
+// Removes model/tooling junk that sometimes leaks into sheet text
 function cleanField(v) {
   let s = String(v || "");
-
-  // Remove OpenAI style content reference artifacts.
   s = s.replace(/contentReference\s*\[[^\]]*\]/gi, "");
   s = s.replace(/\{index\s*=\s*\d+\}/gi, "");
-
-  // Remove leftover bracketed tokens that look like tooling artifacts.
   s = s.replace(/\[(?:source|ref|citation)[^\]]*\]/gi, "");
-
-  // Normalize whitespace.
   s = s.replace(/\s+/g, " ").trim();
-
   return s;
 }
 
@@ -220,17 +207,6 @@ async function loadResources(csvUrl) {
   return items;
 }
 
-function isCrisisResource(resource) {
-  const t = `${resource.title} ${resource.description} ${resource.when_to_use} ${resource.best_for}`.toLowerCase();
-  return (
-    t.includes("crisis") ||
-    t.includes("suicide") ||
-    t.includes("self-harm") ||
-    t.includes("hotline") ||
-    t.includes("988")
-  );
-}
-
 function looksGirlsOnly(resource) {
   const t = `${resource.title} ${resource.description} ${resource.best_for}`.toLowerCase();
   return (
@@ -243,31 +219,24 @@ function looksGirlsOnly(resource) {
   );
 }
 
-// More robust scoring, still deterministic and sheet-only.
+// Deterministic scoring (only used to create a small candidate set).
+// Final inclusion is decided by a strict relevance gate.
 function scoreResource(resource, queryTokens, contextTokens) {
   const blob = `${resource.title} ${resource.description} ${resource.best_for} ${resource.when_to_use} ${resource.not_for} ${resource.fatherlessness_connection}`;
   const hay = tokenize(blob);
 
   let score = 0;
 
-  // Token overlaps
   for (const w of hay) {
     if (queryTokens.includes(w)) score += 7;
     if (contextTokens.includes(w)) score += 2;
   }
 
-  // Phrase boosts (cheap but effective)
-  const q = normalize(queryTokens.join(" "));
-  const titleN = normalize(resource.title);
-  const bestN = normalize(resource.best_for);
-  if (q && titleN.includes(q)) score += 18;
-  if (q && bestN.includes(q)) score += 10;
-
-  // Fatherlessness relevance boost
+  // Encourage fatherlessness relevance
   const fatherText = (resource.fatherlessness_connection || "").toLowerCase();
   if (fatherText.includes("father") || fatherText.includes("dad") || fatherText.includes("fatherless")) score += 5;
 
-  // Slight preference for completeness
+  // Prefer clearer rows
   if (resource.when_to_use) score += 2;
   if (resource.best_for) score += 2;
   if (resource.not_for) score += 1;
@@ -312,91 +281,106 @@ async function openaiJSON(apiKey, messages, { timeoutMs = 25000, model = OPENAI_
   }
 }
 
-function buildFallbackCards(top, userNeed) {
-  return top.map((r) => {
-    const desc = r.description ? r.description : "Visit the link for details.";
-    const why = r.best_for
-      ? `This fits because it is meant for: ${r.best_for}.`
-      : `This was selected as one of the closest matches to what you asked for.`;
-    const next = r.when_to_use
-      ? `Use it when: ${r.when_to_use}. Start by opening the link and following their steps to join or reach out.`
-      : `Open the link, read the overview, and follow their steps to join or contact them.`;
-
-    return {
-      title: r.title,
-      url: r.url,
-      description: cleanField(desc),
-      why: cleanField(why),
-      next_steps: cleanField(next),
-    };
-  });
-}
-
-function clampOneLine(s, max = 220) {
+function oneLine(s, max = 240) {
   const t = cleanField(s).replace(/\n+/g, " ");
   if (t.length <= max) return t;
   return t.slice(0, max - 1).trim() + "…";
 }
 
-function safeReply(text) {
-  const t = clampOneLine(text, 260);
-  return t || "Here are the closest matches from the database.";
-}
-
 async function classifyIntent(apiKey, message, contextText) {
-  // Goal: decide whether to (a) recommend resources now, (b) ask ONE clarifying question,
-  // (c) short out-of-scope redirect, or (d) brief chat response that stays on track.
-  //
-  // No examples lists. No long back-and-forth.
+  // This prevents the “random YMCA” problem by deciding: recommend vs bridge question.
   const payload = await openaiJSON(
     apiKey,
     [
       {
         role: "system",
         content:
-          "You are an intent classifier for a teen-facing support resource navigator.\n" +
-          "Return JSON only.\n" +
-          "Decide the best next action.\n\n" +
-          "Outputs:\n" +
+          "You are an intent router for a teen support resource navigator.\n" +
+          "Return JSON only.\n\n" +
+          "Output format:\n" +
           "{\n" +
-          '  "mode": "resource" | "clarify" | "chat" | "out_of_scope",\n' +
+          '  "mode": "resource" | "bridge" | "chat",\n' +
           '  "need": string,\n' +
-          '  "clarifying_question": string,\n' +
+          '  "bridge_reply": string,\n' +
           '  "chat_reply": string\n' +
           "}\n\n" +
           "Rules:\n" +
-          "- mode=resource when the user is asking for support, coping, feelings, relationships, grief, identity, family issues, or wants resources.\n" +
-          "- mode=out_of_scope when the user is asking for mechanical, homework-solving, or unrelated tasks.\n" +
-          "- mode=clarify only if you truly cannot tell what kind of support they want.\n" +
-          "- mode=chat when they are talking conversationally, but it could relate to support. Keep it short and on track.\n" +
-          "- need must be 1 short sentence summarizing what they want.\n" +
-          "- clarifying_question must be 1 short question.\n" +
-          "- chat_reply must be 1 sentence, calm, and it should invite them to say what they want help with.\n" +
-          "- Do not include example categories.\n"
+          "- mode=resource only when the user is clearly asking for emotional support, guidance, coping, relationships, grief, identity, family issues, father absence, or asks for resources.\n" +
+          "- mode=bridge when the user asks something out-of-scope (how-to, mechanical, homework), but you can infer a human reason behind it (confidence, school event, social pressure, independence). In bridge mode: respond conversationally and ask ONE short question to connect to support.\n" +
+          "- mode=chat when the user is talking casually and you should keep it on track.\n" +
+          "- No example lists.\n" +
+          "- need must be one short sentence summarizing what they seem to want.\n" +
+          "- bridge_reply must be 2 sentences max, and end with ONE question.\n" +
+          "- chat_reply must be 1 sentence and invite them to say what they want help with.\n"
       },
       {
         role: "user",
-        content: JSON.stringify({
-          user_message: message,
-          recent_context: contextText
-        })
+        content: JSON.stringify({ user_message: message, recent_context: contextText })
       }
     ],
     { model: OPENAI_CLASSIFIER_MODEL, temperature: 0.0, timeoutMs: 18000 }
   );
 
   const mode = String(payload?.mode || "").trim();
-  const need = cleanField(payload?.need || "");
-  const clarifying = clampOneLine(payload?.clarifying_question || "", 160);
-  const chatReply = clampOneLine(payload?.chat_reply || "", 220);
+  const allowed = new Set(["resource", "bridge", "chat"]);
 
-  const allowed = new Set(["resource", "clarify", "chat", "out_of_scope"]);
   return {
     mode: allowed.has(mode) ? mode : "resource",
-    need: need || cleanField(message),
-    clarifying_question: clarifying || "What kind of support do you want right now?",
-    chat_reply: chatReply || "Tell me what you want help with, and I’ll pull the closest matches from the database.",
+    need: oneLine(payload?.need || message, 200),
+    bridge_reply: oneLine(payload?.bridge_reply || "That sounds like you’re trying to handle a real-life situation. What’s the part you actually want support with?", 260),
+    chat_reply: oneLine(payload?.chat_reply || "Tell me what you want help with, and I’ll pull the closest matches from the database.", 220),
   };
+}
+
+async function strictSelectAndWriteCards(apiKey, message, contextText, needSummary, candidates) {
+  // This is the core fix:
+  // The model must EXCLUDE anything not directly relevant.
+  // Returning zero cards is allowed and expected when there is no real match.
+  const out = await openaiJSON(
+    apiKey,
+    [
+      {
+        role: "system",
+        content:
+          "You select ONLY directly relevant resources for a teen support navigator, then write clean cards.\n\n" +
+          "ABSOLUTE RULES:\n" +
+          "- Use ONLY the provided resources.\n" +
+          "- Select a resource ONLY if it is clearly and directly relevant to the user's need.\n" +
+          "- If nothing is clearly relevant, select none.\n" +
+          "- Do NOT stretch meanings. Do NOT include generic 'safe space' resources unless the user asked for safety/support spaces.\n" +
+          "- Do NOT add new links.\n" +
+          "- Do NOT use markdown.\n" +
+          "- Do NOT include citations or bracketed tokens.\n\n" +
+          "Return JSON only:\n" +
+          "{\n" +
+          '  "reply": string,\n' +
+          '  "selected_urls": string[],\n' +
+          '  "cards": [{ "title": string, "url": string, "description": string, "why": string, "next_steps": string }]\n' +
+          "}\n\n" +
+          "Reply rules:\n" +
+          "- 1 sentence max.\n" +
+          "- Conversational, on task.\n\n" +
+          "Card rules (only for selected ones):\n" +
+          "- 1 to 2 sentences each field.\n"
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          user_message: message,
+          recent_context: contextText,
+          inferred_need: needSummary,
+          candidates
+        })
+      }
+    ],
+    { model: OPENAI_MODEL, temperature: 0.15, timeoutMs: 24000 }
+  );
+
+  const reply = oneLine(out?.reply || "Here are the closest matches from the database.", 260);
+  const selectedUrls = Array.isArray(out?.selected_urls) ? out.selected_urls.map((u) => cleanField(u)) : [];
+  const cards = Array.isArray(out?.cards) ? out.cards : [];
+
+  return { reply, selectedUrls, cards };
 }
 
 export default async function handler(req, res) {
@@ -457,7 +441,6 @@ export default async function handler(req, res) {
     });
   }
 
-  // Greeting: short and on-track.
   if (isGreeting(message)) {
     return send(res, 200, {
       reply: "Hi. Tell me what you want help with, and I’ll pull the closest matches from the database.",
@@ -466,48 +449,36 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Intent classification (makes it feel smarter and prevents nonsense matches)
     const intent = await classifyIntent(apiKey, message, contextText);
 
-    // Quick deterministic out-of-scope backstop, in case the classifier misses something obvious.
-    const backupOutOfScope = looksOutOfScope(message);
+    // Hard out-of-scope backstop, but still respond in BRIDGE style.
+    const hardOutOfScope = looksOutOfScope(message);
 
-    if (intent.mode === "out_of_scope" || backupOutOfScope) {
+    if (intent.mode === "bridge" || hardOutOfScope) {
+      // Key rule: NO CARDS here, unless the user actually answers with a support need later.
       return send(res, 200, {
-        reply: "I can only recommend support resources from Youth Fatherless Network’s database. What kind of support are you looking for?",
-        cards: [],
-      });
-    }
-
-    if (intent.mode === "clarify") {
-      return send(res, 200, {
-        reply: intent.clarifying_question,
+        reply: intent.bridge_reply,
         cards: [],
       });
     }
 
     if (intent.mode === "chat") {
-      return send(res, 200, {
-        reply: intent.chat_reply,
-        cards: [],
-      });
+      return send(res, 200, { reply: intent.chat_reply, cards: [] });
     }
 
-    // mode === "resource"
+    // mode === resource
     const resources = await loadResources(csvUrl);
 
     const queryTokens = tokenize(message);
     const contextTokens = tokenize(contextText);
-
     const girlAllowed = userIndicatesGirl(message, contextText);
 
-    // Deterministic ranking
     let ranked = resources
       .map((r) => ({ r, s: scoreResource(r, queryTokens, contextTokens) }))
       .filter((x) => x.s > 0)
       .sort((a, b) => b.s - a.s);
 
-    // If we got nothing, do ONE short question.
+    // If deterministic match is weak, do not guess.
     if (!ranked.length) {
       return send(res, 200, {
         reply: "I’m not finding a close match in the database for that phrasing. What should the resource help you handle?",
@@ -515,85 +486,25 @@ export default async function handler(req, res) {
       });
     }
 
-    // Pull a slightly bigger pool, then filter
-    const pool = ranked.slice(0, 10).map((x) => x.r);
+    // Candidate pool
+    let pool = ranked.slice(0, 12).map((x) => x.r);
 
     // Filter girls-only unless user indicates
-    let filtered = pool.filter((r) => (girlAllowed ? true : !looksGirlsOnly(r)));
-    if (!filtered.length) filtered = pool;
+    pool = pool.filter((r) => (girlAllowed ? true : !looksGirlsOnly(r)));
+    if (!pool.length) pool = ranked.slice(0, 12).map((x) => x.r);
 
-    // Avoid crisis items unless the match is very strong or user message suggests urgency.
-    // We do this gently: only remove crisis cards if we still have good non-crisis options.
-    const urgency = normalize(message + " " + contextText);
-    const seemsUrgent =
-      urgency.includes("right now") ||
-      urgency.includes("immediate") ||
-      urgency.includes("panic") ||
-      urgency.includes("can't do this") ||
-      urgency.includes("unsafe") ||
-      urgency.includes("self harm") ||
-      urgency.includes("suicide");
-
-    let top = filtered.slice(0, 5);
-    if (!seemsUrgent) {
-      const nonCrisis = top.filter((r) => !isCrisisResource(r));
-      if (nonCrisis.length >= 2) top = nonCrisis;
-    }
-
-    // Final top N cards
-    top = top.slice(0, 3);
-
-    if (!top.length) {
-      return send(res, 200, {
-        reply: "I’m not finding a close match in the database for that. What should the resource help you do?",
-        cards: [],
-      });
-    }
-
-    // Rewrite step: clean, UI-friendly, strictly based on provided fields
-    const rewrite = await openaiJSON(
+    // STRICT relevance gate + card writing
+    const { reply, selectedUrls, cards } = await strictSelectAndWriteCards(
       apiKey,
-      [
-        {
-          role: "system",
-          content:
-            "You write short, clear resource cards for a teen-facing support resource navigator.\n" +
-            "ABSOLUTE RULES:\n" +
-            "- Use ONLY the provided resource fields.\n" +
-            "- Do NOT add new resources.\n" +
-            "- Do NOT add new links.\n" +
-            "- Do NOT use markdown.\n" +
-            "- Do NOT include citations or bracketed reference tokens.\n" +
-            "- Keep it calm, direct, and specific.\n\n" +
-            "Output JSON only:\n" +
-            '{ "reply": string, "cards": [{"title":string,"url":string,"description":string,"why":string,"next_steps":string}] }\n\n' +
-            "Length rules per card:\n" +
-            "- description: 1 to 2 sentences.\n" +
-            "- why: 1 to 2 sentences.\n" +
-            "- next_steps: 1 to 2 sentences.\n" +
-            "Reply rules:\n" +
-            "- 1 sentence max.\n" +
-            "- Do not include a list of example topics.\n"
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            user_message: message,
-            recent_context: contextText,
-            need_summary: intent.need,
-            resources: top
-          })
-        }
-      ],
-      { model: OPENAI_MODEL, temperature: 0.2, timeoutMs: 24000 }
+      message,
+      contextText,
+      intent.need,
+      pool
     );
 
-    const replyText = safeReply(rewrite?.reply || "Here are the closest matches from the database.");
-    const cards = Array.isArray(rewrite?.cards) ? rewrite.cards : [];
-
-    // Validate: URLs must match our chosen top list exactly.
-    const allowedUrls = new Set(top.map((r) => r.url));
-    const safeCards = cards
+    // Validate URLs must exist in pool
+    const allowedUrls = new Set(pool.map((r) => r.url));
+    const finalCards = (Array.isArray(cards) ? cards : [])
       .map((c) => ({
         title: cleanField(c?.title || ""),
         url: cleanField(c?.url || ""),
@@ -604,14 +515,19 @@ export default async function handler(req, res) {
       .filter((c) => c.url && allowedUrls.has(c.url))
       .slice(0, 3);
 
-    if (safeCards.length) {
-      return send(res, 200, { reply: replyText, cards: safeCards });
+    const finalSelected = selectedUrls.filter((u) => allowedUrls.has(u));
+
+    // If selector picked none, do not show random cards.
+    if (!finalSelected.length || !finalCards.length) {
+      return send(res, 200, {
+        reply: "I don’t see a clearly matching resource in the database for that. What do you want support with right now?",
+        cards: [],
+      });
     }
 
-    // Fallback if model output is unusable
     return send(res, 200, {
-      reply: "Here are the closest matches from the database.",
-      cards: buildFallbackCards(top, message),
+      reply,
+      cards: finalCards,
     });
   } catch (err) {
     const msg = String(err?.message || err);
@@ -620,7 +536,7 @@ export default async function handler(req, res) {
       detail: msg.slice(0, 600),
       hint:
         msg.includes("openai_call_failed")
-          ? "OpenAI call failed. Check OPENAI_API_KEY, billing, and model access. If the model name is invalid, set OPENAI_MODEL in Vercel env vars."
+          ? "OpenAI call failed. Check OPENAI_API_KEY, billing, and model access. If model name is invalid, set OPENAI_MODEL in Vercel env vars."
           : msg.includes("sheet_fetch_failed")
           ? "Sheet fetch failed. GOOGLE_SHEET_CSV_URL must be a published CSV export link."
           : msg.includes("missing_column")
